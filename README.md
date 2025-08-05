@@ -101,7 +101,7 @@ Professional-grade video combination tool with smart file grouping, quality anal
 
 ## 🔗 Related Projects
 
-### [Video Compressor](https://github.com/yourusername/video-compressor)
+### [Video Compressor](https://github.com/AutumnsGrove/Video-Compressor)
 A separate repository containing advanced video compression tools with Gradio interfaces. The Video Compressor folder in this project is maintained as an independent repository for focused development.
 
 **Note:** The Video Compressor tools complement these VideoTools utilities, providing a complete video processing pipeline from analysis through compression and verification.
@@ -185,4 +185,4 @@ MIT License - feel free to use, modify, and distribute these tools for your own 
 
 ---
 
-*Part of a comprehensive video processing toolkit. See also: [Video Compressor](https://github.com/yourusername/video-compressor) for advanced compression workflows.*
+*Part of a comprehensive video processing toolkit. See also: [Video Compressor](https://github.com/AutumnsGrove/Video-Compressor) for advanced compression workflows.*
