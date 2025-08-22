@@ -9,6 +9,7 @@ import json
 import argparse
 import threading
 import time
+import re
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -81,7 +82,8 @@ class VideoScanner:
                 "size_threshold_gb": 1.0,
                 "supported_extensions": [".mp4", ".mov"],
                 "max_workers": 4,
-                "output_filename": "video_scan_results.md"
+                "output_filename": "video_scan_results.md",
+                "exclude_pattern": "_compressed"
             }
     
     def get_file_size_gb(self, file_path: str) -> float:
@@ -108,6 +110,11 @@ class VideoScanner:
                     # Check if it's a supported video file
                     ext = os.path.splitext(item)[1].lower()
                     if ext in self.config['supported_extensions']:
+                        # Check exclude pattern if configured
+                        exclude_pattern = self.config.get('exclude_pattern', '')
+                        if exclude_pattern and re.search(exclude_pattern, item):
+                            continue  # Skip files matching exclude pattern
+                            
                         size_gb = self.get_file_size_gb(item_path)
                         if size_gb >= self.config['size_threshold_gb']:
                             found_files.append((item_path, size_gb))
@@ -139,6 +146,9 @@ class VideoScanner:
         print(f"📏 Size threshold: {self.config['size_threshold_gb']}GB")
         print(f"🎬 Extensions: {', '.join(self.config['supported_extensions'])}")
         print(f"👥 Workers: {self.config['max_workers']}")
+        exclude_pattern = self.config.get('exclude_pattern', '')
+        if exclude_pattern:
+            print(f"🚫 Excluding pattern: {exclude_pattern}")
         print()
         
         # Start progress display in background
@@ -222,6 +232,8 @@ def main():
     parser.add_argument("-o", "--output", help="Output markdown file (overrides config)")
     parser.add_argument("-s", "--size", type=float, 
                        help="Size threshold in GB (overrides config)")
+    parser.add_argument("-e", "--exclude", 
+                       help="Regex pattern to exclude files (overrides config, e.g., '_compressed|_backup')")
     
     args = parser.parse_args()
     
@@ -242,6 +254,8 @@ def main():
         
     if args.size:
         scanner.config['size_threshold_gb'] = args.size
+    if args.exclude:
+        scanner.config['exclude_pattern'] = args.exclude
     
     # Validate path
     if not os.path.exists(args.path):

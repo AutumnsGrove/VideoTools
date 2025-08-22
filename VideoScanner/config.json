@@ -5,5 +5,6 @@
   "max_workers": 4,
   "progress_update_interval": 0.1,
   "scan_hidden_dirs": false,
-  "comment": "Configuration for video file scanner. Adjust size_threshold_gb to change minimum file size for inclusion."
+  "exclude_pattern": "_compressed",
+  "comment": "Configuration for video file scanner. exclude_pattern uses regex to filter out unwanted files (e.g., '_compressed' to skip already compressed files)."
 }
