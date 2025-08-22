@@ -25,25 +25,39 @@ class ProgressDisplay:
         self.total_size_gb = 0.0
         self.active = True
         self.start_time = time.time()
+        self.last_update = 0
+        self.dirs_scanned = 0
         
-    def update(self, directory: str = None, found_file: bool = False, size_gb: float = 0):
+    def update(self, directory: str = None, found_file: bool = False, size_gb: float = 0, dir_completed: bool = False):
         with self.lock:
             if directory:
-                self.current_dir = directory
+                self.current_dir = os.path.basename(directory)
             if found_file:
                 self.files_found += 1
                 self.total_size_gb += size_gb
+            if dir_completed:
+                self.dirs_scanned += 1
+            
+            # Only update display every 0.2 seconds to reduce flicker
+            now = time.time()
+            if now - self.last_update > 0.2:
+                self._display_current_status()
+                self.last_update = now
+    
+    def _display_current_status(self):
+        """Display current status on single line"""
+        elapsed = time.time() - self.start_time
+        # Clear line and write status
+        print(f"\r\033[K🔍 {self.current_dir[:40]:<40} | {self.files_found:>3} files | {self.total_size_gb:>6.1f}GB | {elapsed:>4.0f}s", 
+              end="", flush=True)
     
     def display_loop(self):
-        """Non-flooding display loop"""
+        """Minimal display loop - just ensures we show something if updates stop"""
         while self.active:
-            with self.lock:
-                elapsed = time.time() - self.start_time
-                print(f"\r🔍 Scanning: {self.current_dir[:50]:<50} | "
-                      f"Found: {self.files_found:>4} files | "
-                      f"Size: {self.total_size_gb:>7.1f}GB | "
-                      f"Time: {elapsed:>5.1f}s", end="", flush=True)
-            time.sleep(0.1)
+            time.sleep(1.0)  # Much less frequent updates
+            if self.active:
+                with self.lock:
+                    self._display_current_status()
     
     def stop(self):
         self.active = False
@@ -81,8 +95,7 @@ class VideoScanner:
     def scan_directory(self, directory: str) -> List[Tuple[str, float]]:
         """Scan a single directory for video files"""
         found_files = []
-        dir_name = os.path.basename(directory) or directory
-        self.progress.update(directory=dir_name)
+        self.progress.update(directory=directory)
         
         try:
             for item in os.listdir(directory):
@@ -102,7 +115,8 @@ class VideoScanner:
                             
         except (PermissionError, OSError):
             pass  # Skip directories we can't access
-            
+        
+        self.progress.update(dir_completed=True)
         return found_files
     
     def discover_directories(self, root_path: str) -> List[str]:
@@ -187,9 +201,14 @@ class VideoScanner:
         
         return report
     
-    def save_report(self, content: str):
+    def save_report(self, content: str, scan_path: str):
         """Save markdown report to file"""
-        output_file = self.config['output_filename']
+        if self.config.get('save_to_scan_dir', True):
+            output_filename = self.config['output_filename']
+            output_file = os.path.join(scan_path, output_filename)
+        else:
+            output_file = self.config['output_filename']
+            
         with open(output_file, 'w', encoding='utf-8') as f:
             f.write(content)
         print(f"📝 Report saved to: {output_file}")
@@ -211,7 +230,16 @@ def main():
     
     # Override config with command line args if provided
     if args.output:
-        scanner.config['output_filename'] = args.output
+        # If output contains path, use as-is; otherwise save to scan directory
+        if os.path.dirname(args.output):
+            scanner.config['output_filename'] = args.output
+            scanner.config['save_to_scan_dir'] = False
+        else:
+            scanner.config['output_filename'] = args.output
+            scanner.config['save_to_scan_dir'] = True
+    else:
+        scanner.config['save_to_scan_dir'] = True
+        
     if args.size:
         scanner.config['size_threshold_gb'] = args.size
     
@@ -227,7 +255,7 @@ def main():
         # Generate and save report
         if scanner.results:
             report = scanner.generate_markdown_report()
-            scanner.save_report(report)
+            scanner.save_report(report, args.path)
             print(f"✅ Scan complete! Found {len(scanner.results)} files totaling {sum(s for _, s in scanner.results):.2f}GB")
         else:
             print(f"ℹ️  No video files found above {scanner.config['size_threshold_gb']}GB threshold")
