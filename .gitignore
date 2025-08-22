@@ -32,3 +32,6 @@ logs/
 
 # Secrets
 secrets.json
+
+# Video scanner output files
+**/video_scan_results.md
