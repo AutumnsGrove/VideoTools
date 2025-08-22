@@ -3,7 +3,6 @@
   "supported_extensions": [".mp4", ".mov"],
   "output_filename": "video_scan_results.md",
   "max_workers": 4,
-  "progress_update_interval": 0.1,
   "scan_hidden_dirs": false,
   "exclude_pattern": "_compressed",
   "comment": "Configuration for video file scanner. exclude_pattern uses regex to filter out unwanted files (e.g., '_compressed' to skip already compressed files)."

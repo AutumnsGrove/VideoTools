@@ -7,8 +7,6 @@ Creates markdown reports with file listings and paths for easy copy/paste
 import os
 import json
 import argparse
-import threading
-import time
 import re
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -16,59 +14,9 @@ from datetime import datetime
 from typing import List, Tuple, Dict
 
 
-class ProgressDisplay:
-    """UV-style minimal progress display"""
-    
-    def __init__(self):
-        self.lock = threading.Lock()
-        self.current_dir = ""
-        self.files_found = 0
-        self.total_size_gb = 0.0
-        self.active = True
-        self.start_time = time.time()
-        self.last_update = 0
-        self.dirs_scanned = 0
-        
-    def update(self, directory: str = None, found_file: bool = False, size_gb: float = 0, dir_completed: bool = False):
-        with self.lock:
-            if directory:
-                self.current_dir = os.path.basename(directory)
-            if found_file:
-                self.files_found += 1
-                self.total_size_gb += size_gb
-            if dir_completed:
-                self.dirs_scanned += 1
-            
-            # Only update display every 0.2 seconds to reduce flicker
-            now = time.time()
-            if now - self.last_update > 0.2:
-                self._display_current_status()
-                self.last_update = now
-    
-    def _display_current_status(self):
-        """Display current status on single line"""
-        elapsed = time.time() - self.start_time
-        # Clear line and write status
-        print(f"\r\033[K🔍 {self.current_dir[:40]:<40} | {self.files_found:>3} files | {self.total_size_gb:>6.1f}GB | {elapsed:>4.0f}s", 
-              end="", flush=True)
-    
-    def display_loop(self):
-        """Minimal display loop - just ensures we show something if updates stop"""
-        while self.active:
-            time.sleep(1.0)  # Much less frequent updates
-            if self.active:
-                with self.lock:
-                    self._display_current_status()
-    
-    def stop(self):
-        self.active = False
-        print()  # New line after final update
-
-
 class VideoScanner:
     def __init__(self, config_path: str = "config.json"):
         self.config = self.load_config(config_path)
-        self.progress = ProgressDisplay()
         self.results: List[Tuple[str, float]] = []
         
     def load_config(self, config_path: str) -> Dict:
@@ -97,7 +45,6 @@ class VideoScanner:
     def scan_directory(self, directory: str) -> List[Tuple[str, float]]:
         """Scan a single directory for video files"""
         found_files = []
-        self.progress.update(directory=directory)
         
         try:
             for item in os.listdir(directory):
@@ -118,12 +65,10 @@ class VideoScanner:
                         size_gb = self.get_file_size_gb(item_path)
                         if size_gb >= self.config['size_threshold_gb']:
                             found_files.append((item_path, size_gb))
-                            self.progress.update(found_file=True, size_gb=size_gb)
                             
         except (PermissionError, OSError):
             pass  # Skip directories we can't access
         
-        self.progress.update(dir_completed=True)
         return found_files
     
     def discover_directories(self, root_path: str) -> List[str]:
@@ -142,18 +87,12 @@ class VideoScanner:
     
     def scan_concurrent(self, root_path: str):
         """Scan directories concurrently"""
-        print(f"🚀 Starting concurrent scan of: {root_path}")
+        print(f"🚀 Scanning: {root_path}")
         print(f"📏 Size threshold: {self.config['size_threshold_gb']}GB")
         print(f"🎬 Extensions: {', '.join(self.config['supported_extensions'])}")
-        print(f"👥 Workers: {self.config['max_workers']}")
         exclude_pattern = self.config.get('exclude_pattern', '')
         if exclude_pattern:
             print(f"🚫 Excluding pattern: {exclude_pattern}")
-        print()
-        
-        # Start progress display in background
-        progress_thread = threading.Thread(target=self.progress.display_loop, daemon=True)
-        progress_thread.start()
         
         # Discover all directories first
         directories = self.discover_directories(root_path)
@@ -171,10 +110,7 @@ class VideoScanner:
                     self.results.extend(files_found)
                 except Exception as e:
                     directory = future_to_dir[future]
-                    print(f"\nError scanning {directory}: {e}")
-        
-        # Stop progress display
-        self.progress.stop()
+                    print(f"Error scanning {directory}: {e}")
         
         # Sort results by size (largest first)
         self.results.sort(key=lambda x: x[1], reverse=True)
@@ -277,11 +213,9 @@ def main():
         return 0
         
     except KeyboardInterrupt:
-        scanner.progress.stop()
         print("\n⏹️  Scan interrupted by user")
         return 1
     except Exception as e:
-        scanner.progress.stop()
         print(f"\n❌ Error during scan: {e}")
         return 1
 
