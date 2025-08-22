@@ -1,0 +1,9 @@
+{
+  "size_threshold_gb": 1.0,
+  "supported_extensions": [".mp4", ".mov"],
+  "output_filename": "video_scan_results.md",
+  "max_workers": 4,
+  "progress_update_interval": 0.1,
+  "scan_hidden_dirs": false,
+  "comment": "Configuration for video file scanner. Adjust size_threshold_gb to change minimum file size for inclusion."
+}
