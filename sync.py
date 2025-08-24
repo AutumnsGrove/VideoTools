@@ -47,32 +47,48 @@ class CameraSync:
             suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
         return str(day) + suffix
 
-    def create_date_folder(self, date: datetime) -> Path:
+    def create_date_folder(self, date: datetime, file_type: str = 'video') -> Path:
         year_folder = str(date.year)
         month_folder = date.strftime("%B")
         day_folder = self.get_day_suffix(date.day)
 
-        folder = self.output_base / year_folder / month_folder / day_folder
+        if file_type == 'photo':
+            folder = self.output_base / year_folder / month_folder / day_folder / 'photos'
+        else:
+            folder = self.output_base / year_folder / month_folder / day_folder
+        
         folder.mkdir(parents=True, exist_ok=True)
         return folder
 
-    def get_video_files(self) -> List[tuple[Path, datetime]]:
-        """Get video files with their creation dates."""
+    def get_media_files(self) -> List[tuple[Path, datetime, str]]:
+        """Get media files with their creation dates and file types."""
         video_extensions = {'.mp4', '.mov', '.avi', '.mkv'}
-        video_files = []
+        photo_extensions = {'.jpg', '.jpeg', '.png', '.tiff', '.tif'}
+        media_files = []
 
         for file_path in self.dcim_path.rglob('*'):
-            if file_path.is_file() and file_path.suffix.lower() in video_extensions:
-                file_date = self.get_file_date(file_path)
-                if file_date:
-                    video_files.append((file_path, file_date))
+            if file_path.is_file():
+                suffix_lower = file_path.suffix.lower()
+                file_type = None
+                if suffix_lower in video_extensions:
+                    file_type = 'video'
+                elif suffix_lower in photo_extensions:
+                    file_type = 'photo'
+                
+                if file_type:
+                    file_date = self.get_file_date(file_path)
+                    if file_date:
+                        media_files.append((file_path, file_date, file_type))
 
         # Sort by creation date
-        return sorted(video_files, key=lambda x: x[1])
+        return sorted(media_files, key=lambda x: x[1])
 
-    def generate_new_filename(self, index: int, date: datetime) -> str:
+    def generate_new_filename(self, index: int, date: datetime, file_type: str, original_ext: str) -> str:
         """Generate a clean, numbered filename with date."""
-        return f"video-{index:03d}-{date.strftime('%Y-%m-%d')}.mp4"
+        if file_type == 'video':
+            return f"video-{index:03d}-{date.strftime('%Y-%m-%d')}.mp4"
+        else:  # photo
+            return f"photo-{index:03d}-{date.strftime('%Y-%m-%d')}{original_ext}"
 
     def sync_files(self) -> bool:
         if not self.dcim_path.exists():
@@ -80,9 +96,9 @@ class CameraSync:
             return False
 
         try:
-            files_to_process = self.get_video_files()
+            files_to_process = self.get_media_files()
             if not files_to_process:
-                self.logger.info("No video files found to process.")
+                self.logger.info("No media files found to process.")
                 return True
 
             files_moved = 0
@@ -94,17 +110,17 @@ class CameraSync:
 
             # Group files by date to reset numbering each day
             date_groups = {}
-            for file_path, file_date in files_to_process:
+            for file_path, file_date, file_type in files_to_process:
                 date_key = file_date.date()
                 if date_key not in date_groups:
                     date_groups[date_key] = []
-                date_groups[date_key].append((file_path, file_date))
+                date_groups[date_key].append((file_path, file_date, file_type))
 
             # Process each day's files
             for date_key, day_files in date_groups.items():
-                for idx, (file_path, file_date) in enumerate(day_files, 1):
-                    dest_folder = self.create_date_folder(file_date)
-                    new_filename = self.generate_new_filename(idx, file_date)
+                for idx, (file_path, file_date, file_type) in enumerate(day_files, 1):
+                    dest_folder = self.create_date_folder(file_date, file_type)
+                    new_filename = self.generate_new_filename(idx, file_date, file_type, file_path.suffix)
                     dest_file = dest_folder / new_filename
 
                     if dest_file.exists():
