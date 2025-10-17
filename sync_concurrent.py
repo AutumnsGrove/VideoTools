@@ -534,6 +534,39 @@ class CameraSync:
             return False
 
 
+def load_config() -> Dict[str, str]:
+    """
+    Load configuration from config.json file in the same directory.
+
+    Returns:
+        Dictionary with 'source_path' and 'destination_path' keys
+    """
+    config_path = Path(__file__).parent / 'config.json'
+
+    if not config_path.exists():
+        logging.warning(f"Config file not found at {config_path}")
+        logging.info("Create config.json with 'source_path' and 'destination_path' keys")
+        return {}
+
+    try:
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+
+        # Validate required keys
+        if 'source_path' not in config or 'destination_path' not in config:
+            logging.warning("config.json missing required keys: 'source_path' and/or 'destination_path'")
+            return {}
+
+        return config
+
+    except json.JSONDecodeError as e:
+        logging.error(f"Error parsing config.json: {e}")
+        return {}
+    except IOError as e:
+        logging.error(f"Error reading config.json: {e}")
+        return {}
+
+
 def main():
     """
     Main CLI entry point with argparse interface.
@@ -560,10 +593,10 @@ Examples:
         '''
     )
 
-    parser.add_argument('source', type=str,
-                       help='Source directory containing media files (e.g., /Volumes/MicroSD/DCIM)')
-    parser.add_argument('dest', type=str,
-                       help='Destination base directory for organized files')
+    parser.add_argument('source', type=str, nargs='?', default=None,
+                       help='Source directory containing media files (defaults to config.json)')
+    parser.add_argument('dest', type=str, nargs='?', default=None,
+                       help='Destination base directory for organized files (defaults to config.json)')
     parser.add_argument('-w', '--workers', type=int, default=None,
                        help='Number of concurrent workers (default: min(4, cpu_count))')
     parser.add_argument('-d', '--dry-run', action='store_true',
@@ -578,10 +611,21 @@ Examples:
 
     args = parser.parse_args()
 
+    # Load config file for default paths
+    config = load_config()
+
+    # Use command-line args if provided, otherwise fall back to config.json
+    source_path = args.source if args.source else config.get('source_path')
+    dest_path = args.dest if args.dest else config.get('destination_path')
+
+    # Validate that we have both paths
+    if not source_path or not dest_path:
+        parser.error("Source and destination paths must be provided either via command-line or config.json")
+
     # Create syncer with parsed arguments
     syncer = CameraSync(
-        dcim_path=args.source,
-        output_base=args.dest,
+        dcim_path=source_path,
+        output_base=dest_path,
         max_workers=args.workers,
         dry_run=args.dry_run,
         verify=args.verify,

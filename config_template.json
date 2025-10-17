@@ -1,0 +1,5 @@
+{
+  "source_path": "/path/to/your/source/DCIM",
+  "destination_path": "/path/to/your/destination",
+  "comment": "Copy this file to config.json and update the paths with your actual source and destination directories"
+}
