@@ -16,6 +16,7 @@ import logging
 import tempfile
 import shutil
 import json
+import time
 from typing import Optional, Dict, Any
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from video_tools_mcp.config.prompts import (
     DEFAULT_ANALYSIS_PROMPT,
     DEFAULT_SCREENSHOT_EXTRACTION_PROMPT
 )
+from video_tools_mcp.utils.image_utils import deduplicate_frames
 
 # Set up module logger
 logger = logging.getLogger(__name__)
@@ -259,27 +261,165 @@ def extract_smart_screenshots(
     Returns:
         Dict with screenshots list, metadata_path, total_extracted, duplicates_removed, processing_time
     """
-    # STUB Phase 1
-    logger.info(f"[STUB] extract_smart_screenshots called with: {video_path}")
+    from video_tools_mcp.processing.frame_extraction import FrameExtractor
+    from video_tools_mcp.models.qwen_vl import QwenVLModel
+
+    start_time = time.time()
+    video_path_obj = Path(video_path)
+
+    logger.info(f"Starting smart screenshot extraction: {video_path}")
     logger.info(f"  interval={sample_interval}s, threshold={similarity_threshold}, max={max_screenshots}")
+
+    # Validate video file
+    if not video_path_obj.exists():
+        raise FileNotFoundError(f"Video file not found: {video_path}")
+
+    # Setup output directory
+    if output_dir is None:
+        output_dir_obj = video_path_obj.parent / f"{video_path_obj.stem}_screenshots"
+    else:
+        output_dir_obj = Path(output_dir)
+    output_dir_obj.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Output directory: {output_dir_obj}")
 
     # Use default prompt if not provided
     prompt = extraction_prompt or DEFAULT_SCREENSHOT_EXTRACTION_PROMPT
-    logger.info(f"  Using extraction prompt: {prompt[:50]}...")
+    logger.info(f"  Using extraction prompt: {prompt[:80]}...")
 
-    # TODO Phase 2: Integrate with screenshot_extraction.py
-    # - Sample frames at intervals
-    # - Compute pHash for deduplication
-    # - Run Qwen VL to decide: keep/skip with reasoning
-    # - Generate captions for kept frames
-    # - Save with metadata JSON
+    # Step 1: Extract frames from video
+    logger.info("Extracting frames from video...")
+    frame_extractor = FrameExtractor(quality=95)  # Higher quality for screenshots
+    frames = frame_extractor.extract_frames_at_interval(
+        video_path_obj,
+        sample_interval=float(sample_interval),
+        max_frames=max_screenshots * 3  # Extract more to account for deduplication
+    )
+    logger.info(f"Extracted {len(frames)} initial frames")
+
+    # Step 2: Deduplicate frames using pHash
+    logger.info(f"Deduplicating frames (threshold={similarity_threshold})...")
+    frame_paths = [f.frame_path for f in frames]
+    unique_paths, duplicate_paths = deduplicate_frames(
+        frame_paths,
+        threshold=similarity_threshold,
+        hash_size=8,
+        keep_first=True
+    )
+    duplicates_removed = len(duplicate_paths)
+    logger.info(f"After deduplication: {len(unique_paths)} unique frames ({duplicates_removed} duplicates removed)")
+
+    # Limit to max_screenshots after deduplication
+    unique_paths = unique_paths[:max_screenshots]
+    logger.info(f"Processing up to {len(unique_paths)} frames for AI evaluation")
+
+    # Step 3: Load Qwen VL model
+    logger.info("Loading Qwen VL model...")
+    qwen_model = QwenVLModel()
+    qwen_model.load()
+
+    # Step 4: Evaluate each frame with AI
+    logger.info("Evaluating frames with Qwen VL...")
+    evaluation_prompt = f"{prompt}\n\nRespond with 'KEEP' if this frame should be saved as a screenshot, or 'SKIP' if not. Then explain why in 1-2 sentences."
+
+    screenshots_metadata = []
+    kept_count = 0
+
+    for i, frame_path in enumerate(unique_paths):
+        logger.debug(f"Evaluating frame {i+1}/{len(unique_paths)}: {frame_path.name}")
+
+        try:
+            # Get AI decision
+            evaluation = qwen_model.analyze_frame(
+                str(frame_path),
+                evaluation_prompt,
+                max_tokens=256,
+                temperature=0.5
+            )
+
+            ai_response = evaluation["analysis"]
+            should_keep = "KEEP" in ai_response.upper()[:50]  # Check first 50 chars for decision
+
+            if should_keep:
+                # Generate caption
+                caption_result = qwen_model.analyze_frame(
+                    str(frame_path),
+                    "Describe this image in one concise sentence suitable as a caption.",
+                    max_tokens=128,
+                    temperature=0.7
+                )
+                caption = caption_result["analysis"].strip()
+
+                # Copy frame to output directory
+                screenshot_filename = f"screenshot_{kept_count+1:05d}.jpg"
+                screenshot_path = output_dir_obj / screenshot_filename
+                shutil.copy2(frame_path, screenshot_path)
+
+                # Find original timestamp
+                frame_meta = next((f for f in frames if f.frame_path == frame_path), None)
+                timestamp = frame_meta.timestamp if frame_meta else 0.0
+
+                screenshots_metadata.append({
+                    "filename": screenshot_filename,
+                    "path": str(screenshot_path),
+                    "timestamp": timestamp,
+                    "caption": caption,
+                    "ai_reasoning": ai_response,
+                    "confidence": evaluation.get("confidence", 0.0)
+                })
+
+                kept_count += 1
+                logger.info(f"  KEPT: {caption[:60]}...")
+            else:
+                logger.debug(f"  SKIPPED: {ai_response[:80]}...")
+
+        except Exception as e:
+            logger.error(f"Failed to evaluate frame {frame_path}: {e}")
+            continue
+
+    # Unload model
+    qwen_model.unload()
+
+    # Step 5: Save metadata JSON
+    processing_time = time.time() - start_time
+
+    metadata = {
+        "video_path": str(video_path_obj),
+        "extraction_prompt": prompt,
+        "sample_interval": sample_interval,
+        "similarity_threshold": similarity_threshold,
+        "max_screenshots": max_screenshots,
+        "output_dir": str(output_dir_obj),
+        "total_frames_extracted": len(frames),
+        "duplicates_removed": duplicates_removed,
+        "frames_evaluated": len(unique_paths),
+        "screenshots_kept": kept_count,
+        "processing_time": processing_time,
+        "screenshots": screenshots_metadata
+    }
+
+    metadata_path = output_dir_obj / "metadata.json"
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+    logger.info(f"Metadata saved to: {metadata_path}")
+
+    # Step 6: Cleanup temp frames
+    logger.info("Cleaning up temporary frames...")
+    if frames:
+        temp_frame_dir = frames[0].frame_path.parent
+        try:
+            shutil.rmtree(temp_frame_dir)
+            logger.debug(f"Removed temp directory: {temp_frame_dir}")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup temp frames: {e}")
+
+    logger.info(f"Smart screenshot extraction complete: {kept_count} screenshots saved in {processing_time:.1f}s")
 
     return {
-        "screenshots": [f"{video_path}.screenshots/screenshot_00001.jpg"],
-        "metadata_path": f"{video_path}.screenshots.json",
-        "total_extracted": 25,
-        "duplicates_removed": 5,
-        "processing_time": 180.4
+        "screenshots": [str(s["path"]) for s in screenshots_metadata],
+        "metadata_path": str(metadata_path),
+        "total_extracted": kept_count,
+        "duplicates_removed": duplicates_removed,
+        "processing_time": processing_time
     }
 
 

@@ -1,7 +1,10 @@
-"""Qwen VL model for video frame analysis (Phase 1: Stub Implementation)."""
+"""Qwen VL model for video frame analysis using mlx-vlm."""
 
+import gc
 import logging
 from typing import Dict, Any, List, Optional
+from mlx_vlm import load, generate
+from mlx_vlm.utils import load_image
 from video_tools_mcp.models.model_manager import ModelManager
 from video_tools_mcp.config import load_config
 
@@ -35,50 +38,46 @@ class QwenVLModel(ModelManager):
 
     def load(self) -> None:
         """
-        Load Qwen VL model into memory.
+        Load Qwen VL model into memory using mlx-vlm.
 
-        Phase 1: STUB - Simulates loading
-        Phase 4: TODO - Implement actual model loading:
-            - Load MLX vision-language model
-            - Load image processor
-            - Verify model compatibility
-            - Test with sample image
-            - Set is_loaded = True on success
+        Loads the MLX-optimized Qwen2-VL model and processor.
+        This is a vision-language model that can analyze images and video frames.
+
+        Raises:
+            RuntimeError: If model loading fails
         """
-        logger.info(f"[STUB Phase 1] Would load Qwen VL model: {self.model_id}")
-        logger.info("[STUB] In Phase 4, this will load mlx_vlm or similar library")
+        logger.info(f"Loading Qwen VL model: {self.model_id}")
 
-        # TODO Phase 4: Implement actual loading
-        # from mlx_vlm import load
-        # self._model, self._processor = load(self.model_id)
-        # # Verify model works with test image
-        # test_result = self._test_model()
-        # if not test_result:
-        #     raise RuntimeError("Model failed verification test")
+        try:
+            # Load model and processor using mlx-vlm
+            self._model, self._processor = load(self.model_id)
+            logger.info(f"Successfully loaded Qwen VL model and processor")
 
-        self.is_loaded = True
-        logger.info(f"[STUB] Qwen VL model marked as loaded")
+            self.is_loaded = True
+            logger.info(f"Qwen VL model ready for inference")
+
+        except Exception as e:
+            logger.error(f"Failed to load Qwen VL model: {e}")
+            raise RuntimeError(f"Model loading failed: {e}") from e
 
     def unload(self) -> None:
         """
-        Unload model from memory.
+        Unload model from memory and free resources.
 
-        Phase 1: STUB - Simulates unloading
-        Phase 4: TODO - Implement actual cleanup:
-            - Clear model from memory
-            - Clear processor from memory
-            - Clear image cache
-            - Force garbage collection
+        Clears the model and processor from memory and forces
+        garbage collection to free up RAM.
         """
-        logger.info(f"[STUB Phase 1] Would unload Qwen VL model")
+        logger.info(f"Unloading Qwen VL model")
 
-        # TODO Phase 4: Implement actual unloading
-        # self._model = None
-        # self._processor = None
-        # import gc; gc.collect()
+        # Clear model and processor references
+        self._model = None
+        self._processor = None
+
+        # Force garbage collection to free memory
+        gc.collect()
 
         self.is_loaded = False
-        logger.info("[STUB] Qwen VL model marked as unloaded")
+        logger.info("Qwen VL model unloaded and memory freed")
 
     def analyze_frame(
         self,
@@ -88,15 +87,10 @@ class QwenVLModel(ModelManager):
         temperature: float = 0.7
     ) -> Dict[str, Any]:
         """
-        Analyze a video frame using vision-language model.
+        Analyze a video frame using Qwen2-VL vision-language model.
 
-        Phase 1: STUB - Returns placeholder data
-        Phase 4: TODO - Implement actual frame analysis:
-            - Load and preprocess image
-            - Prepare prompt with image
-            - Run model inference
-            - Post-process output
-            - Return structured result
+        Uses mlx-vlm to perform inference on an image with the given prompt.
+        The model will analyze the image and generate a text response.
 
         Args:
             image_path: Path to image file (JPG, PNG, etc.)
@@ -107,55 +101,58 @@ class QwenVLModel(ModelManager):
         Returns:
             Dict containing:
                 - analysis: Generated text description/answer
-                - confidence: Model confidence score (0.0 to 1.0)
-                - tokens_used: Number of tokens generated
+                - confidence: Model confidence score (0.85 placeholder, mlx-vlm doesn't provide this)
+                - tokens_used: Estimated tokens from response length
 
-        Phase 4 Expected Format:
+        Example:
             {
                 "analysis": "The image shows a person standing in a park...",
-                "confidence": 0.92,
+                "confidence": 0.85,
                 "tokens_used": 45
             }
+
+        Raises:
+            RuntimeError: If model is not loaded
         """
-        logger.warning(f"[STUB Phase 1] analyze_frame() not implemented")
-        logger.info(f"[STUB] Would analyze: {image_path}")
-        logger.info(f"[STUB] Prompt: {prompt}")
+        # Ensure model is loaded
+        if not self.is_loaded:
+            raise RuntimeError("Model not loaded. Call load() first.")
 
-        # TODO Phase 4: Implement actual frame analysis
-        # self.ensure_loaded()
-        #
-        # # Load and preprocess image
-        # from PIL import Image
-        # image = Image.open(image_path)
-        #
-        # # Prepare input
-        # inputs = self._processor(
-        #     text=prompt,
-        #     images=image,
-        #     return_tensors="pt"
-        # )
-        #
-        # # Generate response
-        # outputs = self._model.generate(
-        #     **inputs,
-        #     max_new_tokens=max_tokens,
-        #     temperature=temperature
-        # )
-        #
-        # # Decode and return
-        # analysis = self._processor.decode(outputs[0])
-        # return {
-        #     "analysis": analysis,
-        #     "confidence": calculate_confidence(outputs),
-        #     "tokens_used": len(outputs[0])
-        # }
+        logger.info(f"Analyzing frame: {image_path}")
+        logger.debug(f"Prompt: {prompt}")
 
-        # Phase 1: Return placeholder data
-        return {
-            "analysis": f"[STUB] Frame analysis would appear here for prompt: {prompt}",
-            "confidence": 0.0,
-            "tokens_used": 0
-        }
+        try:
+            # Load image using mlx_vlm utility
+            image = load_image(image_path)
+
+            # Prepare prompt in Qwen2-VL format
+            formatted_prompt = f"<|im_start|>user\n<image>\n{prompt}<|im_end|>\n<|im_start|>assistant\n"
+
+            # Generate response using mlx-vlm
+            response = generate(
+                self._model,
+                self._processor,
+                image,
+                formatted_prompt,
+                max_tokens=max_tokens,
+                temp=temperature
+            )
+
+            # Estimate tokens (rough approximation based on response length)
+            # Typically 1 token ≈ 4 characters for English text
+            tokens_used = len(response) // 4
+
+            logger.info(f"Analysis complete: {tokens_used} tokens generated")
+
+            return {
+                "analysis": response,
+                "confidence": 0.85,  # Placeholder - mlx-vlm doesn't provide confidence scores
+                "tokens_used": tokens_used
+            }
+
+        except Exception as e:
+            logger.error(f"Frame analysis failed: {e}")
+            raise RuntimeError(f"Frame analysis failed: {e}") from e
 
     def analyze_frames_batch(
         self,
@@ -164,14 +161,11 @@ class QwenVLModel(ModelManager):
         max_tokens: int = 512
     ) -> List[Dict[str, Any]]:
         """
-        Analyze multiple frames in batch for efficiency.
+        Analyze multiple frames sequentially.
 
-        Phase 1: STUB - Returns list of placeholder data
-        Phase 4: TODO - Implement batch processing:
-            - Load and preprocess all images
-            - Batch inference for efficiency
-            - Post-process all outputs
-            - Return list of results
+        Processes each image one at a time using analyze_frame().
+        Note: This is sequential processing, not true batching, as mlx-vlm
+        processes images individually.
 
         Args:
             image_paths: List of paths to image files
@@ -180,53 +174,39 @@ class QwenVLModel(ModelManager):
 
         Returns:
             List of analysis results (same format as analyze_frame)
+
+        Raises:
+            RuntimeError: If model is not loaded
         """
-        logger.warning(f"[STUB Phase 1] analyze_frames_batch() not implemented")
-        logger.info(f"[STUB] Would analyze {len(image_paths)} frames in batch")
+        logger.info(f"Analyzing {len(image_paths)} frames in batch")
 
-        # TODO Phase 4: Implement batch processing
-        # self.ensure_loaded()
-        # results = []
-        # for image_path in image_paths:
-        #     result = self.analyze_frame(image_path, prompt, max_tokens)
-        #     results.append(result)
-        # return results
+        # Ensure model is loaded
+        if not self.is_loaded:
+            raise RuntimeError("Model not loaded. Call load() first.")
 
-        # Phase 1: Return placeholder data for each frame
-        return [
-            {
-                "analysis": f"[STUB] Analysis for frame {i+1}",
-                "confidence": 0.0,
-                "tokens_used": 0
-            }
-            for i in range(len(image_paths))
-        ]
+        results = []
+        for i, image_path in enumerate(image_paths):
+            logger.debug(f"Processing frame {i+1}/{len(image_paths)}: {image_path}")
+            result = self.analyze_frame(image_path, prompt, max_tokens)
+            results.append(result)
+
+        logger.info(f"Batch analysis complete: {len(results)} frames processed")
+        return results
 
     def get_model_capabilities(self) -> Dict[str, Any]:
         """
-        Get information about model capabilities.
+        Get information about Qwen2-VL model capabilities.
 
-        Phase 1: STUB - Returns basic info
-        Phase 4: TODO - Return actual model capabilities:
-            - Supported image formats
-            - Maximum image resolution
-            - Context window size
-            - Special features (OCR, face detection, etc.)
+        Returns information about supported image formats, resolution limits,
+        context window size, and special features of the vision-language model.
 
         Returns:
-            Dict with model capability information
+            Dict with model capability information including:
+                - max_image_size: Maximum supported image resolution
+                - supported_formats: List of supported image file formats
+                - context_window: Token context window size
+                - features: List of supported analysis features
         """
-        logger.info("[STUB Phase 1] get_model_capabilities() stub")
-
-        # TODO Phase 4: Return actual capabilities
-        # return {
-        #     "max_image_size": self._processor.max_image_size,
-        #     "supported_formats": ["jpg", "png", "webp"],
-        #     "context_window": 8192,
-        #     "features": ["scene_description", "ocr", "object_detection"]
-        # }
-
-        # Phase 1: Return generic capabilities
         return {
             "max_image_size": (1024, 1024),
             "supported_formats": ["jpg", "png", "webp"],
