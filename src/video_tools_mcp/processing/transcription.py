@@ -188,38 +188,22 @@ def transcribe_video_file(
     audio_path = extract_audio(video_path)
 
     try:
-        # Load audio
-        audio_data, sample_rate = load_audio(audio_path)
-        logger.info(f"Audio loaded: {len(audio_data)} samples at {sample_rate}Hz")
-
-        # Chunk audio
-        chunks = chunk_audio(audio_data, sample_rate, chunk_duration, overlap_duration)
-        logger.info(f"Processing {len(chunks)} audio chunks")
-
         # Load Parakeet model
         model = ParakeetModel()
         model.ensure_loaded()
 
-        # Transcribe each chunk
-        chunk_results = []
-        for i, (chunk_data, start_time, end_time) in enumerate(chunks):
-            logger.info(f"Transcribing chunk {i+1}/{len(chunks)} ({start_time:.1f}s - {end_time:.1f}s)")
+        # Transcribe audio (Parakeet handles chunking internally)
+        logger.info(f"Transcribing audio with Parakeet (chunking: {chunk_duration}s, overlap: {overlap_duration}s)")
+        result = model.transcribe(
+            audio_path,
+            language=language,
+            chunk_duration=chunk_duration,
+            overlap_duration=overlap_duration
+        )
 
-            # Transcribe this chunk
-            result = model.transcribe(chunk_data, sample_rate, language)
+        logger.info(f"Transcription complete: {result['duration']:.1f}s, {len(result['segments'])} segments")
 
-            # Store chunk timing info
-            result['chunk_start_time'] = start_time
-            result['chunk_end_time'] = end_time
-            chunk_results.append(result)
-
-        # Merge chunk results
-        final_result = merge_chunk_transcriptions(chunk_results, overlap_duration)
-        final_result['chunks_processed'] = len(chunks)
-
-        logger.info(f"Transcription complete: {final_result['duration']:.1f}s, {len(final_result['segments'])} segments")
-
-        return final_result
+        return result
 
     finally:
         # Clean up temporary audio file

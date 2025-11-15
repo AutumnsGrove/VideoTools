@@ -74,14 +74,16 @@ class ParakeetModel(ModelManager):
         self,
         audio_path: str,
         language: str = "en",
-        return_timestamps: bool = True
+        chunk_duration: float = 120.0,
+        overlap_duration: float = 15.0
     ) -> Dict[str, Any]:
         """Transcribe audio file using Parakeet MLX.
 
         Args:
-            audio_path: Path to audio file (WAV, 16kHz mono preferred)
-            language: Language code (default: "en")
-            return_timestamps: Include word-level timestamps (default: True)
+            audio_path: Path to audio file (WAV preferred)
+            language: Language code (not used by Parakeet TDT, kept for compatibility)
+            chunk_duration: Duration of each chunk in seconds (default: 120.0)
+            overlap_duration: Overlap between chunks in seconds (default: 15.0)
 
         Returns:
             Dict with:
@@ -93,50 +95,46 @@ class ParakeetModel(ModelManager):
         self.ensure_loaded()
 
         try:
-            logger.info(f"Transcribing audio: {audio_path}")
+            logger.info(f"Transcribing audio file: {audio_path}")
 
-            # Load audio file
-            audio_data, sample_rate = load_audio(audio_path)
-            logger.debug(f"Audio loaded: {len(audio_data)} samples at {sample_rate}Hz")
-
-            # Run transcription
+            # Run transcription with Parakeet's built-in chunking
             result = self._model.transcribe(
-                audio_data,
-                language=language
+                audio_path,
+                chunk_duration=chunk_duration,
+                overlap_duration=overlap_duration
             )
 
             # Extract text and segments
             full_text = result.text if hasattr(result, 'text') else str(result)
 
-            # Build segments list
+            # Build segments list from sentences (Parakeet TDT provides sentence-level segments)
             segments = []
-            if hasattr(result, 'segments') and result.segments:
-                for seg in result.segments:
+            if hasattr(result, 'sentences') and result.sentences:
+                for sent in result.sentences:
                     segments.append({
-                        "start": getattr(seg, 'start', 0.0),
-                        "end": getattr(seg, 'end', 0.0),
-                        "text": getattr(seg, 'text', ''),
-                        "confidence": getattr(seg, 'confidence', 1.0)
-                    })
-            elif hasattr(result, 'words') and result.words:
-                # If we have word-level timestamps
-                for word in result.words:
-                    segments.append({
-                        "start": getattr(word, 'start', 0.0),
-                        "end": getattr(word, 'end', 0.0),
-                        "text": getattr(word, 'word', ''),
-                        "confidence": getattr(word, 'confidence', 1.0)
+                        "start": sent.start,
+                        "end": sent.end,
+                        "text": sent.text,
+                        "confidence": 1.0
                     })
             else:
-                # No timestamps, create single segment
+                # Fallback: single segment with estimated duration
                 segments.append({
                     "start": 0.0,
-                    "end": len(audio_data) / sample_rate,
+                    "end": 0.0,  # Will be updated after loading audio
                     "text": full_text,
                     "confidence": 1.0
                 })
 
-            duration = len(audio_data) / sample_rate
+            # Calculate duration from segments or load audio
+            if segments and segments[-1]['end'] > 0:
+                duration = segments[-1]['end']
+            else:
+                # Load audio to get duration
+                audio_data = load_audio(audio_path, sampling_rate=16000)
+                duration = len(audio_data) / 16000
+                if segments:
+                    segments[0]['end'] = duration
 
             logger.info(f"Transcription complete: {len(segments)} segments, {len(full_text)} chars")
 
