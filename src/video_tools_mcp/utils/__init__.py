@@ -10,6 +10,13 @@ from .file_utils import (
     get_video_duration,
     validate_video_path,
 )
+from .srt_utils import (
+    generate_srt,
+    write_srt_file,
+    parse_srt_file,
+    format_timestamp,
+    parse_timestamp,
+)
 
 __all__ = [
     'AudioExtractionError',
@@ -20,4 +27,9 @@ __all__ = [
     'generate_temp_filename',
     'get_video_duration',
     'validate_video_path',
+    'generate_srt',
+    'write_srt_file',
+    'parse_srt_file',
+    'format_timestamp',
+    'parse_timestamp',
 ]
