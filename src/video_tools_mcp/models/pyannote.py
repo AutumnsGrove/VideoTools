@@ -54,15 +54,48 @@ class PyannoteModel(ModelManager):
         logger.info(f"Loading Pyannote model: {self.model_id}")
 
         from pyannote.audio import Pipeline
+        import json
+        from pathlib import Path
 
-        # Load pipeline with HuggingFace token from environment
-        hf_token = os.getenv("HF_TOKEN") or self._hf_token
+        # Load HF token from secrets.json, environment, or config (in that order)
+        hf_token = None
+
+        # 1. Try secrets.json first
+        secrets_path = Path(__file__).parent.parent.parent / "secrets.json"
+        if secrets_path.exists():
+            try:
+                with open(secrets_path) as f:
+                    secrets = json.load(f)
+                    hf_token = secrets.get("hf_token")
+                    if hf_token and hf_token != "PASTE_YOUR_HUGGINGFACE_TOKEN_HERE":
+                        logger.info("Using HF token from secrets.json")
+            except Exception as e:
+                logger.warning(f"Failed to load secrets.json: {e}")
+
+        # 2. Fallback to environment variable
         if not hf_token:
-            raise ValueError("HF_TOKEN environment variable required for Pyannote")
+            hf_token = os.getenv("HF_TOKEN")
+            if hf_token:
+                logger.info("Using HF token from environment variable")
 
+        # 3. Final fallback to config
+        if not hf_token:
+            hf_token = self._hf_token
+            if hf_token:
+                logger.info("Using HF token from config")
+
+        if not hf_token:
+            raise ValueError(
+                "HuggingFace token required for Pyannote. Please either:\n"
+                "1. Add 'hf_token' to secrets.json in project root, OR\n"
+                "2. Set HF_TOKEN environment variable, OR\n"
+                "3. Add hf_token to config/models.json"
+            )
+
+        # Load pipeline with token (newer pyannote uses 'token' not 'use_auth_token')
         self._pipeline = Pipeline.from_pretrained(
             self.model_id,
-            use_auth_token=hf_token
+            token=hf_token
         )
 
         # Set device (mps for Apple Silicon, cuda for NVIDIA, cpu fallback)
