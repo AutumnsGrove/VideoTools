@@ -60,8 +60,8 @@ class PyannoteModel(ModelManager):
         # Load HF token from secrets.json, environment, or config (in that order)
         hf_token = None
 
-        # 1. Try secrets.json first
-        secrets_path = Path(__file__).parent.parent.parent / "secrets.json"
+        # 1. Try secrets.json first (project root)
+        secrets_path = Path(__file__).parent.parent.parent.parent / "secrets.json"
         if secrets_path.exists():
             try:
                 with open(secrets_path) as f:
@@ -163,8 +163,8 @@ class PyannoteModel(ModelManager):
         diarization = self._pipeline(
             audio_path,
             num_speakers=num_speakers,
-            min_speakers=min_speakers or self._model_config.min_speakers,
-            max_speakers=max_speakers or self._model_config.max_speakers
+            min_speakers=min_speakers,
+            max_speakers=max_speakers
         )
 
         # Convert pyannote output to our format
