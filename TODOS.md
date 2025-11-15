@@ -318,33 +318,300 @@ def rename_speakers(srt_path, speaker_map, output_path=None, backup=True):
 
 ---
 
-## 🎯 Next Steps - Phase 6: Polish & Testing
+## 🎯 Phase 6: Integration Testing, Benchmarking & Release (NEXT)
 
-### Integration Testing with Real Videos
-- [ ] Create comprehensive test suite with various video formats
-- [ ] Test all 5 tools end-to-end with sample videos
-- [ ] Validate accuracy metrics (transcription WER, diarization DER)
-- [ ] Test edge cases (very long videos, poor audio quality, etc.)
+**Status**: 📋 Framework Ready - All infrastructure in place
+**Estimated Time**: 10-15 hours
+**Goal**: Validate all features, measure performance, complete documentation, release v1.0
 
-### Performance Benchmarking
-- [ ] Benchmark all models on M4 Mac mini
-- [ ] Measure processing speed for different video lengths
-- [ ] Profile memory usage and optimize if needed
-- [ ] Document performance characteristics in README
+---
 
-### Documentation Updates
-- [ ] Update README.md with complete usage examples
-- [ ] Create SKILL.md for MCP server capabilities
-- [ ] Add troubleshooting guide
-- [ ] Document model requirements and disk space needs
-- [ ] Add example outputs for all tools
+### 6.1: Test Infrastructure Setup (2-3 hours)
 
-### Release v1.0 Preparation
-- [ ] Final code review and cleanup
-- [ ] Verify all dependencies are properly declared
-- [ ] Test installation on fresh environment
-- [ ] Create release notes
-- [ ] Tag v1.0 release
+#### Objectives
+- Set up test videos for integration testing
+- Configure test environment
+- Validate test framework
+
+#### Tasks
+- [ ] **Find and download test videos** (1 hour)
+  - Find free stock videos from Pexels/Pixabay
+  - Download 30s short video (single speaker)
+  - Download 2-3 min multi-speaker video (interview/podcast)
+  - Download 5 min visual content video (tutorial/presentation)
+  - Download 10-15 min long video for performance testing
+  - Update `scripts/download_test_videos.py` with actual URLs
+  - Document video sources in `tests/fixtures/videos/README.md`
+
+- [ ] **Configure test environment** (30 min)
+  - Verify HuggingFace token in secrets.json
+  - Ensure all ML dependencies installed (`uv sync --extra all`)
+  - Test FFmpeg availability
+  - Create .gitignore entries for test videos
+
+- [ ] **Validate test framework** (30 min)
+  - Run pytest on empty integration tests (should skip)
+  - Verify test discovery works
+  - Check pytest markers are registered
+  - Test fixture loading
+
+- [ ] **Create test utilities** (1 hour)
+  - Helper functions for calling MCP tools
+  - Functions for validating output formats (SRT, JSON)
+  - Utilities for measuring performance metrics
+  - Cleanup helpers for temp files
+
+**Deliverables**:
+- ✅ 4+ test videos in tests/fixtures/videos/
+- ✅ Test environment configured and verified
+- ✅ Test utilities implemented
+
+---
+
+### 6.2: Integration Tests Implementation (4-5 hours)
+
+#### Objectives
+- Implement comprehensive integration tests for all 5 tools
+- Ensure all major workflows are tested
+- Validate output formats and accuracy
+
+#### Tasks
+- [ ] **Transcription tests** (1 hour)
+  - Implement test_transcribe_short_video_srt()
+  - Implement test_transcribe_short_video_json()
+  - Implement test_transcribe_short_video_txt()
+  - Verify SRT format (timestamps, text segments)
+  - Verify JSON structure (segments array, metadata)
+  - Check word count is reasonable
+  - Test error handling (invalid video path)
+
+- [ ] **Speaker diarization tests** (1.5 hours)
+  - Implement test_transcribe_with_speakers_basic()
+  - Verify speaker labels (SPEAKER_00, SPEAKER_01)
+  - Check num_speakers matches expected
+  - Test with num_speakers parameter
+  - Implement test_rename_speakers_tool()
+  - Verify speaker renaming works correctly
+  - Test backup file creation
+
+- [ ] **Video analysis tests** (1.5 hours)
+  - Implement test_analyze_video_basic()
+  - Verify JSON analysis file structure
+  - Check frame analyses have timestamps
+  - Test custom analysis_prompt
+  - Test sample_interval parameter
+  - Test max_frames parameter
+  - Validate per-frame confidence scores
+
+- [ ] **Screenshot extraction tests** (1 hour)
+  - Implement test_extract_screenshots_basic()
+  - Verify screenshot files are created
+  - Check metadata.json structure
+  - Test deduplication (verify duplicates_removed > 0)
+  - Test custom extraction_prompt
+  - Verify captions are generated
+  - Test max_screenshots limit
+
+- [ ] **Edge case tests** (1 hour)
+  - Test very long video (15 min)
+  - Test invalid video path (should raise error)
+  - Test empty/corrupt video file
+  - Test video with no audio
+  - Test video with poor audio quality
+  - Test 4K high-resolution video (if available)
+
+**Deliverables**:
+- ✅ 20+ integration tests implemented
+- ✅ All 5 tools tested end-to-end
+- ✅ Edge cases covered
+
+---
+
+### 6.3: Performance Benchmarking (2-3 hours)
+
+#### Objectives
+- Measure actual performance metrics
+- Compare with target performance
+- Identify optimization opportunities
+
+#### Tasks
+- [ ] **Transcription benchmarks** (30 min)
+  - Measure processing time for each test video
+  - Calculate real-time factor (RTF)
+  - Measure peak memory usage
+  - Record results in BENCHMARKS.md
+  - Target: RTF < 0.05 (20x real-time)
+
+- [ ] **Diarization benchmarks** (30 min)
+  - Measure transcribe_with_speakers processing time
+  - Calculate RTF for diarization
+  - Measure peak memory usage
+  - Compare with transcription-only speed
+  - Target: RTF < 0.5 (2x real-time)
+
+- [ ] **Video analysis benchmarks** (1 hour)
+  - Measure frames per second (fps)
+  - Test with different sample intervals (1s, 5s, 10s)
+  - Measure token usage per frame
+  - Record Qwen VL model load time
+  - Test with 5-minute and 15-minute videos
+  - Target: 2-3 fps
+
+- [ ] **Screenshot extraction benchmarks** (1 hour)
+  - Measure effective frames/second
+  - Track deduplication percentage
+  - Measure AI evaluation time per frame
+  - Compare with/without deduplication
+  - Count screenshots per video minute
+  - Target: 1-2 effective fps, 5-10 screenshots per 10 min
+
+- [ ] **Memory profiling** (30 min)
+  - Profile memory usage over time for each tool
+  - Identify peak memory for each model
+  - Check for memory leaks (run tools multiple times)
+  - Document memory requirements
+
+**Deliverables**:
+- ✅ BENCHMARKS.md populated with actual measurements
+- ✅ Performance meets targets (or optimization plan created)
+- ✅ Memory usage documented
+
+---
+
+### 6.4: Documentation Completion (3-4 hours)
+
+#### Objectives
+- Complete all user-facing documentation
+- Ensure examples are accurate and helpful
+- Create comprehensive usage guide
+
+#### Tasks
+- [ ] **Update README.md** (1.5 hours)
+  - Add installation instructions
+  - Add quick start guide
+  - Document all 5 tools with examples
+  - Add performance characteristics from benchmarks
+  - Add system requirements
+  - Add troubleshooting section
+  - Add screenshots/examples of outputs
+
+- [ ] **Complete SKILL.md** (1 hour)
+  - Fill in actual installation steps
+  - Add detailed usage examples for each tool
+  - Update performance table with benchmark results
+  - Add configuration details
+  - Document model requirements
+  - Add common troubleshooting issues
+  - Include example outputs
+
+- [ ] **Review and update DEVELOPMENT.md** (30 min)
+  - Update Phase 4 & 5 sections with lessons learned
+  - Add Phase 6 testing notes
+  - Update performance expectations
+  - Add contribution guidelines
+
+- [ ] **Update TESTING.md** (30 min)
+  - Fill in actual test results
+  - Update benchmark results
+  - Add troubleshooting tips from testing experience
+  - Document any new test requirements
+
+- [ ] **Create CHANGELOG.md** (30 min)
+  - Document all phases and features
+  - List all commits with descriptions
+  - Prepare for v1.0 release notes
+
+**Deliverables**:
+- ✅ Complete and accurate README.md
+- ✅ Comprehensive SKILL.md for MCP discovery
+- ✅ Updated DEVELOPMENT.md
+- ✅ CHANGELOG.md ready for release
+
+---
+
+### 6.5: Release Preparation (1-2 hours)
+
+#### Objectives
+- Prepare v1.0 release
+- Ensure clean installation works
+- Finalize repository
+
+#### Tasks
+- [ ] **Final code review** (30 min)
+  - Review all Phase 4 & 5 code
+  - Check for TODOs that need resolution
+  - Verify logging is appropriate
+  - Check error messages are helpful
+  - Ensure no debug code remains
+
+- [ ] **Clean installation test** (30 min)
+  - Test `uv sync --extra all` on fresh clone
+  - Verify all dependencies resolve correctly
+  - Test each tool with sample video
+  - Check model downloads work
+  - Verify documentation is accurate
+
+- [ ] **Repository cleanup** (30 min)
+  - Update .gitignore (ensure test videos excluded)
+  - Remove any temp files
+  - Check secrets.json is in .gitignore
+  - Verify no large files committed
+  - Clean up any debug scripts
+
+- [ ] **Version bump and release** (30 min)
+  - Update version to 1.0.0 in pyproject.toml
+  - Update version in __init__.py
+  - Create git tag v1.0.0
+  - Write release notes
+  - Update TODOS.md to mark Phase 6 complete
+
+**Deliverables**:
+- ✅ Version 1.0.0 ready
+- ✅ Clean installation verified
+- ✅ Repository polished and ready for release
+
+---
+
+### Success Criteria for Phase 6
+
+**Testing**:
+- [x] Test infrastructure in place
+- [ ] 20+ integration tests passing
+- [ ] All 5 tools tested end-to-end
+- [ ] Edge cases covered
+- [ ] No critical bugs found
+
+**Performance**:
+- [ ] Benchmark results documented
+- [ ] Performance meets or exceeds targets
+- [ ] Memory usage within acceptable limits
+- [ ] Optimization opportunities identified
+
+**Documentation**:
+- [ ] README.md complete and accurate
+- [ ] SKILL.md ready for MCP discovery
+- [ ] All examples tested and working
+- [ ] Troubleshooting guide helpful
+- [ ] CHANGELOG.md complete
+
+**Release**:
+- [ ] v1.0.0 tagged
+- [ ] Clean installation works
+- [ ] All features functional
+- [ ] Repository polished
+
+---
+
+## 📦 Phase 6 Deliverables Checklist
+
+- [ ] **Test Videos**: 4+ test videos downloaded and documented
+- [ ] **Integration Tests**: 20+ tests implemented and passing
+- [ ] **Benchmarks**: All tools benchmarked with results in BENCHMARKS.md
+- [ ] **README.md**: Complete with examples and troubleshooting
+- [ ] **SKILL.md**: Comprehensive MCP server documentation
+- [ ] **CHANGELOG.md**: Full history documented
+- [ ] **Version 1.0.0**: Tagged and ready for release
+- [ ] **Clean Install**: Verified on fresh environment
 
 ---
 
