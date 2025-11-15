@@ -36,3 +36,16 @@ secrets.json
 # Video scanner output files
 **/video_scan_results.md
 config.json
+
+# MCP Server specific
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+tests/fixtures/*.mp4
+tests/fixtures/*.mov
+tests/fixtures/*.avi
+.cache/
+temp_audio/
