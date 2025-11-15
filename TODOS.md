@@ -41,9 +41,9 @@
 
 ---
 
-### ✅ COMPLETED - Phase 3: Speaker Diarization
+### 🔄 PAUSED - Phase 3: Speaker Diarization
 
-#### ✅ All Tasks Completed
+#### ✅ Implementation Complete (Code-wise)
 - [x] Pyannote dependencies installed (pyannote-audio, torch)
 - [x] PyTorch with MPS backend verified (GPU acceleration)
 - [x] Pyannote model loading in `models/pyannote.py`
@@ -66,8 +66,23 @@
   - [x] Create backup if requested
   - [x] Write updated SRT file
 
-**Status**: 100% Complete ✅
-**Implementation Time**: ~2 hours
+- [x] **Secrets management implemented**
+  - [x] Created secrets.json system for HF_TOKEN
+  - [x] Added to .gitignore
+
+#### ❌ Blocked By External Dependencies
+- [ ] **HuggingFace License Acceptance Required**:
+  - [x] pyannote/speaker-diarization-3.1 (accepted)
+  - [x] pyannote/segmentation-3.0 (accepted)
+  - [x] pyannote/speaker-diarization-community-1 (accepted)
+
+- [ ] **Pyannote Library Issue**: torchcodec/AudioDecoder dependency broken
+  - May require different pyannote version or torchcodec fix
+  - Investigate alternative: use dict input format for audio instead of file path
+
+**Status**: 95% Complete (Code Done, Blocked by Dependencies)
+**Implementation Time**: ~3 hours
+**Next Steps When Resumed**: Fix torchcodec issue or use alternative audio input method
 
 **Commits**:
 - `82e1723` - Phase 3 complete - Speaker diarization with Pyannote
