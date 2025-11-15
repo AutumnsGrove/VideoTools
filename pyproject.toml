@@ -37,6 +37,42 @@ dev = [
     "mypy>=1.8.0",
 ]
 
+# Phase 2: Video Transcription with Parakeet MLX
+transcription = [
+    "parakeet-mlx>=0.4.0",
+    "mlx>=0.29.0",
+    "numpy>=2.3.0",
+    "scipy>=1.16.0",
+]
+
+# Phase 3: Speaker Diarization with Pyannote
+diarization = [
+    "pyannote-audio>=4.0.0",
+    "torch>=2.9.0",
+    "torchaudio>=2.9.0",
+]
+
+# Phase 4 & 5: Video Analysis and Smart Screenshots
+vision = [
+    "mlx-vlm>=0.1.0",  # Will be installed in Phase 4
+    "imagehash>=4.3.0",  # Will be installed in Phase 5
+    "pillow>=8.0,<12.0",  # Match gradio's pillow constraint
+]
+
+# All ML features combined
+all = [
+    "parakeet-mlx>=0.4.0",
+    "mlx>=0.29.0",
+    "numpy>=2.3.0",
+    "scipy>=1.16.0",
+    "pyannote-audio>=4.0.0",
+    "torch>=2.9.0",
+    "torchaudio>=2.9.0",
+    "mlx-vlm>=0.1.0",
+    "imagehash>=4.3.0",
+    "pillow>=8.0,<12.0",  # Match gradio's pillow constraint
+]
+
 [project.scripts]
 video-tools-mcp = "video_tools_mcp.server:main"
 
