@@ -239,3 +239,116 @@ def mock_config_dict():
             "default_format": "srt"
         }
     }
+
+
+# ============================================
+# Integration Test Fixtures (Phase 6)
+# ============================================
+
+# Test video paths - these match the download script filenames
+FIXTURES_DIR = Path(__file__).parent / "fixtures" / "videos"
+
+# Single speaker videos
+SHORT_TUTORIAL = FIXTURES_DIR / "short_30s_addition_tutorial.mp4"
+SHORT_HISTORY = FIXTURES_DIR / "short_120s_edward_viii.mp4"
+MEDIUM_TED_TALK = FIXTURES_DIR / "medium_357s_clayton_cameron_ted.mp4"
+LONG_TUTORIAL = FIXTURES_DIR / "long_663s_big_bang_tutorial.mp4"
+
+# Multi-speaker videos
+MULTI_SPEAKER_2 = FIXTURES_DIR / "multi_180s_job_interview.mp4"
+MULTI_SPEAKER_3 = FIXTURES_DIR / "multi_300s_cafe_conversation.mp4"
+
+# Visual content videos
+VISUAL_SHORT = FIXTURES_DIR / "visual_90s_llama_drama_1080p.mp4"
+VISUAL_EFFECTS = FIXTURES_DIR / "visual_734s_tears_steel_1080p.mp4"
+
+# Long-form & edge case videos
+LONG_PRESENTATION = FIXTURES_DIR / "long_883s_david_rose_ted.mp4"
+EDGE_4K = FIXTURES_DIR / "edge_888s_sintel_2048p.mp4"
+
+
+def videos_available() -> Dict[str, bool]:
+    """Check which test videos are available."""
+    return {
+        "short_tutorial": SHORT_TUTORIAL.exists(),
+        "short_history": SHORT_HISTORY.exists(),
+        "medium_ted_talk": MEDIUM_TED_TALK.exists(),
+        "long_tutorial": LONG_TUTORIAL.exists(),
+        "multi_speaker_2": MULTI_SPEAKER_2.exists(),
+        "multi_speaker_3": MULTI_SPEAKER_3.exists(),
+        "visual_short": VISUAL_SHORT.exists(),
+        "visual_effects": VISUAL_EFFECTS.exists(),
+        "long_presentation": LONG_PRESENTATION.exists(),
+        "edge_4k": EDGE_4K.exists(),
+    }
+
+
+def any_videos_available() -> bool:
+    """Check if at least one test video is available."""
+    return any(videos_available().values())
+
+
+def all_videos_available() -> bool:
+    """Check if all test videos are available."""
+    return all(videos_available().values())
+
+
+@pytest.fixture
+def require_short_video():
+    """Fixture that requires a short test video."""
+    if not SHORT_TUTORIAL.exists():
+        pytest.skip(
+            f"Short test video not found: {SHORT_TUTORIAL.name}. "
+            "Download with: python scripts/download_test_videos.py --video short_tutorial"
+        )
+    return SHORT_TUTORIAL
+
+
+@pytest.fixture
+def require_multi_speaker_video():
+    """Fixture that requires a multi-speaker video."""
+    if not MULTI_SPEAKER_2.exists():
+        pytest.skip(
+            f"Multi-speaker video not found: {MULTI_SPEAKER_2.name}. "
+            "Download with: python scripts/download_test_videos.py --video interview_2speaker"
+        )
+    return MULTI_SPEAKER_2
+
+
+@pytest.fixture
+def require_visual_video():
+    """Fixture that requires a visual content video."""
+    if not VISUAL_SHORT.exists():
+        pytest.skip(
+            f"Visual test video not found: {VISUAL_SHORT.name}. "
+            "Download with: python scripts/download_test_videos.py --video visual_short"
+        )
+    return VISUAL_SHORT
+
+
+@pytest.fixture
+def require_any_video():
+    """Fixture that requires at least one test video."""
+    if not any_videos_available():
+        pytest.skip(
+            "No test videos found. Download with: python scripts/download_test_videos.py"
+        )
+    # Return the first available video
+    for video_path in [SHORT_TUTORIAL, SHORT_HISTORY, MEDIUM_TED_TALK, VISUAL_SHORT]:
+        if video_path.exists():
+            return video_path
+    pytest.skip("No test videos found")
+
+
+def pytest_configure(config):
+    """Pytest configuration hook."""
+    # Register custom markers
+    config.addinivalue_line(
+        "markers", "requires_videos: mark test as requiring test videos"
+    )
+    config.addinivalue_line(
+        "markers", "slow: mark test as slow (>5 seconds)"
+    )
+    config.addinivalue_line(
+        "markers", "benchmark: mark test as performance benchmark"
+    )
