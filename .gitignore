@@ -44,8 +44,8 @@ config.json
 .mypy_cache/
 .coverage
 htmlcov/
-tests/fixtures/*.mp4
-tests/fixtures/*.mov
-tests/fixtures/*.avi
+tests/fixtures/**/*.mp4
+tests/fixtures/**/*.mov
+tests/fixtures/**/*.avi
 .cache/
 temp_audio/

@@ -17,27 +17,106 @@ from pathlib import Path
 import sys
 
 
-# Test video URLs (TODO Phase 6: Find and add actual free stock video URLs)
+# Test video URLs - All Creative Commons or Public Domain licensed
+# Last Updated: 2025-11-15
 TEST_VIDEOS = {
-    "short": {
-        "url": "https://example.com/short_30s_video.mp4",  # TODO: Replace with actual URL
-        "filename": "short_30s_single_speaker.mp4",
-        "description": "30-second video with single speaker for basic testing",
+    # ========================================
+    # CATEGORY A: Single Speaker Videos
+    # ========================================
+    "short_tutorial": {
+        "url": "https://archive.org/download/AddingTwoDigitNumbers_201307/Basic%20Addition%20Video.mp4",
+        "filename": "short_30s_addition_tutorial.mp4",
+        "description": "Khan Academy basic addition tutorial (~30-60s, single speaker)",
+        "duration": "~60s",
+        "speakers": 1,
+        "size": "5.6 MB",
     },
-    "multi_speaker": {
-        "url": "https://example.com/interview_180s.mp4",  # TODO: Replace with actual URL
-        "filename": "multi_180s_interview.mp4",
-        "description": "2-3 minute interview with multiple speakers",
+    "short_history_1": {
+        "url": "https://archive.org/download/10TenMinuteHistoryThOfEthOfTheBantary/Ten%20Minute%20History/The%20Interwar%20Period%201918-1939/03-Edward%20VIII%20and%20the%20Abdication%20Crisis%20-%20History%20Matters.mp4",
+        "filename": "short_120s_edward_viii.mp4",
+        "description": "History Matters: Edward VIII Abdication (~2min, animated narration)",
+        "duration": "~120s",
+        "speakers": 1,
+        "size": "6.1 MB",
     },
-    "visual": {
-        "url": "https://example.com/tutorial_300s.mp4",  # TODO: Replace with actual URL
-        "filename": "visual_300s_tutorial.mp4",
-        "description": "5-minute tutorial with varied visual content",
+    "medium_ted_talk": {
+        "url": "http://download.ted.com/talks/ClaytonCameron_2013Y-480p.mp4?apikey=TEDDOWNLOAD",
+        "filename": "medium_357s_clayton_cameron_ted.mp4",
+        "description": "Clayton Cameron TED Talk (5:57, single speaker presentation)",
+        "duration": "357s",
+        "speakers": 1,
+        "size": "42.3 MB",
     },
-    "long": {
-        "url": "https://example.com/presentation_900s.mp4",  # TODO: Replace with actual URL
-        "filename": "long_900s_presentation.mp4",
-        "description": "10-15 minute long-form video for performance testing",
+    "long_tutorial": {
+        "url": "https://archive.org/download/Big_Bang_Tutorial_/Big_Bang_Tutorial_.mp4",
+        "filename": "long_663s_big_bang_tutorial.mp4",
+        "description": "Khan Academy Big Bang tutorial (11:03, educational narration)",
+        "duration": "663s",
+        "speakers": 1,
+        "size": "19.6 MB",
+    },
+
+    # ========================================
+    # CATEGORY B: Multi-Speaker Videos
+    # ========================================
+    "interview_2speaker": {
+        "url": "https://archive.org/download/video-job-interview/video%20job%20interview.mp4",
+        "filename": "multi_180s_job_interview.mp4",
+        "description": "Video job interview (~3min, 2+ speakers)",
+        "duration": "~180s",
+        "speakers": 2,
+        "size": "92.4 MB",
+    },
+    "interview_3speaker": {
+        "url": "https://archive.org/download/Timothy_Leary_Archives_174-a/174-a_512kb.mp4",
+        "filename": "multi_300s_cafe_conversation.mp4",
+        "description": "Timothy Leary cafe conversation (~5min, 3 speakers)",
+        "duration": "~300s",
+        "speakers": 3,
+        "size": "249.6 MB",
+    },
+
+    # ========================================
+    # CATEGORY C: Visual Content Videos
+    # ========================================
+    "visual_short": {
+        "url": "https://archive.org/download/Caminandes1LlamaDrama/01_llama_drama_1080p.mp4",
+        "filename": "visual_90s_llama_drama_1080p.mp4",
+        "description": "Caminandes: Llama Drama (90s, animated film, 1080p)",
+        "duration": "90s",
+        "speakers": 0,
+        "size": "33.5 MB",
+        "resolution": "1080p",
+    },
+    "visual_effects": {
+        "url": "https://archive.org/download/Tears-of-Steel/tears_of_steel_1080p.mp4",
+        "filename": "visual_734s_tears_steel_1080p.mp4",
+        "description": "Tears of Steel (12:14, Blender film with dialogue, 1080p)",
+        "duration": "734s",
+        "speakers": 3,
+        "size": "72.6 MB",
+        "resolution": "1080p",
+    },
+
+    # ========================================
+    # CATEGORY D: Long-Form & Edge Cases
+    # ========================================
+    "long_presentation": {
+        "url": "http://download.ted.com/talks/DavidSRose_2007U-480p.mp4",
+        "filename": "long_883s_david_rose_ted.mp4",
+        "description": "David S. Rose TED Talk (14:43, startup pitch presentation)",
+        "duration": "883s",
+        "speakers": 1,
+        "size": "97.2 MB",
+    },
+    "edge_4k": {
+        "url": "https://archive.org/download/Sintel/sintel-2048-stereo_512kb.mp4",
+        "filename": "edge_888s_sintel_2048p.mp4",
+        "description": "Sintel (14:48, Blender film, 2048p for 4K testing)",
+        "duration": "888s",
+        "speakers": 2,
+        "size": "73.8 MB",
+        "resolution": "2048p",
     },
 }
 

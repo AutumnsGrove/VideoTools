@@ -121,14 +121,51 @@ Examples:
 
 ## Current Test Videos
 
-<!-- Update this section as videos are added -->
-- [ ] Short test video (30s)
-- [ ] Multi-speaker video (2-3 min)
-- [ ] Visual content video (5 min)
-- [ ] Long-form video (10-15 min)
-- [ ] Poor audio quality video
-- [ ] High-motion video
-- [ ] 4K video
+**Total: 10 videos | ~700 MB total | All Creative Commons/Public Domain**
+
+### Single Speaker Videos (4 videos)
+- [x] **short_30s_addition_tutorial.mp4** (5.6 MB, ~60s)
+  - Khan Academy: Basic Addition tutorial
+  - Single speaker, educational narration
+
+- [x] **short_120s_edward_viii.mp4** (6.1 MB, ~120s)
+  - History Matters: Edward VIII Abdication Crisis
+  - Animated narration, clear audio
+
+- [x] **medium_357s_clayton_cameron_ted.mp4** (42.3 MB, 5:57)
+  - Clayton Cameron TED Talk (480p)
+  - Single speaker presentation
+
+- [x] **long_663s_big_bang_tutorial.mp4** (19.6 MB, 11:03)
+  - Khan Academy: Big Bang Tutorial
+  - Long-form educational content
+
+### Multi-Speaker Videos (2 videos)
+- [x] **multi_180s_job_interview.mp4** (92.4 MB, ~3min)
+  - Video job interview with 2+ speakers
+  - Good for speaker diarization testing
+
+- [x] **multi_300s_cafe_conversation.mp4** (249.6 MB, ~5min)
+  - Timothy Leary cafe conversation
+  - 3 speakers, natural dialogue
+
+### Visual Content Videos (2 videos)
+- [x] **visual_90s_llama_drama_1080p.mp4** (33.5 MB, 90s)
+  - Caminandes: Llama Drama (1080p)
+  - Blender animated short
+
+- [x] **visual_734s_tears_steel_1080p.mp4** (72.6 MB, 12:14)
+  - Tears of Steel (1080p)
+  - Blender film with visual effects, multiple speakers
+
+### Long-Form & Edge Cases (2 videos)
+- [x] **long_883s_david_rose_ted.mp4** (97.2 MB, 14:43)
+  - David S. Rose TED Talk (480p)
+  - Long presentation for performance testing
+
+- [x] **edge_888s_sintel_2048p.mp4** (73.8 MB, 14:48)
+  - Sintel (2048p)
+  - Blender film, high resolution for 4K testing
 
 ---
 
