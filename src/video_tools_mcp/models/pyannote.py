@@ -1,6 +1,9 @@
-"""Pyannote model for speaker diarization (Phase 1: Stub Implementation)."""
+"""Pyannote model for speaker diarization."""
 
+import gc
 import logging
+import os
+import torch
 from typing import Dict, Any, Optional
 from video_tools_mcp.models.model_manager import ModelManager
 from video_tools_mcp.config import load_config
@@ -12,12 +15,11 @@ class PyannoteModel(ModelManager):
     """
     Pyannote model for speaker diarization.
 
-    Phase 1: Stub implementation with interface definition
-    Phase 3: Actual pipeline loading and diarization
-
     Model: pyannote/speaker-diarization-3.1
     Purpose: Identify "who spoke when" in audio recordings
     Requires: HuggingFace token with pyannote model access
+
+    Note: Requires accepting the model's user agreement on HuggingFace
     """
 
     def __init__(self):
@@ -41,58 +43,52 @@ class PyannoteModel(ModelManager):
         """
         Load Pyannote diarization pipeline.
 
-        Phase 1: STUB - Simulates loading
-        Phase 3: TODO - Implement actual pipeline loading:
-            - Validate HuggingFace token
-            - Load pyannote.audio pipeline
-            - Set device (CPU/GPU/MPS)
-            - Verify pipeline works
-            - Set is_loaded = True on success
+        Validates HuggingFace token, loads the pipeline, and configures device.
 
         Raises:
             ValueError: If HuggingFace token is missing
         """
-        logger.info(f"[STUB Phase 1] Would load Pyannote model: {self.model_id}")
-        logger.info("[STUB] In Phase 3, this will load pyannote.audio Pipeline")
+        if self.is_loaded:
+            return
 
-        # TODO Phase 3: Implement actual loading
-        # if not self._hf_token:
-        #     raise ValueError("HuggingFace token required for Pyannote")
-        #
-        # from pyannote.audio import Pipeline
-        # self._pipeline = Pipeline.from_pretrained(
-        #     self.model_id,
-        #     use_auth_token=self._hf_token
-        # )
-        # # Set device (MPS for Mac, CUDA for NVIDIA, CPU fallback)
-        # import torch
-        # if torch.backends.mps.is_available():
-        #     self._pipeline.to(torch.device("mps"))
+        logger.info(f"Loading Pyannote model: {self.model_id}")
+
+        from pyannote.audio import Pipeline
+
+        # Load pipeline with HuggingFace token from environment
+        hf_token = os.getenv("HF_TOKEN") or self._hf_token
+        if not hf_token:
+            raise ValueError("HF_TOKEN environment variable required for Pyannote")
+
+        self._pipeline = Pipeline.from_pretrained(
+            self.model_id,
+            use_auth_token=hf_token
+        )
+
+        # Set device (mps for Apple Silicon, cuda for NVIDIA, cpu fallback)
+        device = self._model_config.device
+        self._pipeline.to(torch.device(device))
 
         self.is_loaded = True
-        logger.info(f"[STUB] Pyannote model marked as loaded")
+        logger.info(f"Pyannote model loaded successfully on device: {device}")
 
     def unload(self) -> None:
-        """
-        Unload pipeline from memory.
+        """Unload model and free memory."""
+        if not self.is_loaded:
+            return
 
-        Phase 1: STUB - Simulates unloading
-        Phase 3: TODO - Implement actual cleanup:
-            - Clear pipeline from memory
-            - Clear CUDA/MPS cache if applicable
-            - Force garbage collection
-        """
-        logger.info(f"[STUB Phase 1] Would unload Pyannote model")
+        logger.info("Unloading Pyannote model")
+        self._pipeline = None
 
-        # TODO Phase 3: Implement actual unloading
-        # self._pipeline = None
-        # import torch
-        # if torch.backends.mps.is_available():
-        #     torch.mps.empty_cache()
-        # import gc; gc.collect()
+        # Clear GPU cache
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        elif torch.backends.mps.is_available():
+            torch.mps.empty_cache()
 
+        gc.collect()
         self.is_loaded = False
-        logger.info("[STUB] Pyannote model marked as unloaded")
+        logger.info("Pyannote model unloaded successfully")
 
     def diarize(
         self,
@@ -103,14 +99,6 @@ class PyannoteModel(ModelManager):
     ) -> Dict[str, Any]:
         """
         Perform speaker diarization on audio file.
-
-        Phase 1: STUB - Returns placeholder data
-        Phase 3: TODO - Implement actual diarization:
-            - Load audio file
-            - Run diarization pipeline
-            - Extract speaker segments
-            - Post-process results (merge short segments, etc.)
-            - Return structured result
 
         Args:
             audio_path: Path to audio file (WAV, MP3, etc.)
@@ -124,93 +112,58 @@ class PyannoteModel(ModelManager):
                 - speakers: List of unique speaker IDs
                 - num_speakers: Total number of speakers detected
 
-        Phase 3 Expected Format:
+        Example result:
             {
                 "segments": [
-                    {
-                        "start": 0.0,
-                        "end": 2.5,
-                        "speaker": "SPEAKER_00",
-                        "confidence": 0.95
-                    },
-                    {
-                        "start": 2.7,
-                        "end": 5.2,
-                        "speaker": "SPEAKER_01",
-                        "confidence": 0.92
-                    }
+                    {"start": 0.0, "end": 2.5, "speaker": "SPEAKER_00"},
+                    {"start": 2.7, "end": 5.2, "speaker": "SPEAKER_01"}
                 ],
                 "speakers": ["SPEAKER_00", "SPEAKER_01"],
                 "num_speakers": 2
             }
         """
-        logger.warning(f"[STUB Phase 1] diarize() not implemented")
-        logger.info(f"[STUB] Would diarize: {audio_path}")
-        logger.info(f"[STUB] num_speakers={num_speakers}, min={min_speakers}, max={max_speakers}")
+        self.ensure_loaded()
 
-        # TODO Phase 3: Implement actual diarization
-        # self.ensure_loaded()
-        #
-        # # Prepare diarization parameters
-        # params = {}
-        # if num_speakers:
-        #     params["num_speakers"] = num_speakers
-        # if min_speakers:
-        #     params["min_speakers"] = min_speakers
-        # if max_speakers:
-        #     params["max_speakers"] = max_speakers
-        #
-        # # Run diarization
-        # diarization = self._pipeline(audio_path, **params)
-        #
-        # # Parse results
-        # return parse_diarization_result(diarization)
+        logger.info(f"Performing diarization on: {audio_path}")
 
-        # Phase 1: Return placeholder data
-        placeholder_speakers = num_speakers or 2
-        return {
-            "segments": [
-                {
-                    "start": 0.0,
-                    "end": 2.5,
-                    "speaker": "SPEAKER_00",
-                    "confidence": 0.0
-                },
-                {
-                    "start": 2.7,
-                    "end": 5.0,
-                    "speaker": "SPEAKER_01" if placeholder_speakers > 1 else "SPEAKER_00",
-                    "confidence": 0.0
-                }
-            ],
-            "speakers": [f"SPEAKER_{i:02d}" for i in range(placeholder_speakers)],
-            "num_speakers": placeholder_speakers
+        # Run diarization
+        diarization = self._pipeline(
+            audio_path,
+            num_speakers=num_speakers,
+            min_speakers=min_speakers or self._model_config.min_speakers,
+            max_speakers=max_speakers or self._model_config.max_speakers
+        )
+
+        # Convert pyannote output to our format
+        segments = []
+        speakers = set()
+
+        for turn, _, speaker in diarization.itertracks(yield_label=True):
+            segments.append({
+                "start": float(turn.start),
+                "end": float(turn.end),
+                "speaker": speaker
+            })
+            speakers.add(speaker)
+
+        result = {
+            "segments": segments,
+            "speakers": sorted(list(speakers)),
+            "num_speakers": len(speakers)
         }
+
+        logger.info(f"Diarization complete: {result['num_speakers']} speakers, {len(segments)} segments")
+        return result
 
     def verify_token(self) -> bool:
         """
-        Verify that HuggingFace token is valid and has access to pyannote models.
-
-        Phase 1: STUB - Always returns True
-        Phase 3: TODO - Implement actual verification:
-            - Test HuggingFace API with token
-            - Verify access to pyannote/speaker-diarization-3.1
-            - Check model license acceptance
+        Verify HuggingFace token is available.
 
         Returns:
-            True if token is valid and has access, False otherwise
+            True if token is available, False otherwise
         """
-        logger.info("[STUB Phase 1] verify_token() stub")
-
-        # TODO Phase 3: Implement actual token verification
-        # from huggingface_hub import HfApi
-        # api = HfApi()
-        # try:
-        #     api.model_info(self.model_id, token=self._hf_token)
-        #     return True
-        # except Exception as e:
-        #     logger.error(f"Token verification failed: {e}")
-        #     return False
-
-        # Phase 1: Assume token is valid
-        return self._hf_token is not None
+        token = os.getenv("HF_TOKEN") or self._hf_token
+        if not token:
+            logger.warning("HF_TOKEN not found in environment variables or config")
+            return False
+        return True

@@ -13,7 +13,11 @@ Phase 2+: Real integrations with Parakeet, Qwen VL, etc.
 """
 
 import logging
-from typing import Optional
+import tempfile
+import shutil
+import json
+from typing import Optional, Dict, Any
+from pathlib import Path
 
 from fastmcp import FastMCP
 from video_tools_mcp.config.prompts import (
@@ -72,38 +76,121 @@ def transcribe_with_speakers(
     video_path: str,
     output_format: str = "srt",
     num_speakers: Optional[int] = None,
-    min_speakers: int = 1,
-    max_speakers: int = 10
-) -> dict:
+    min_speakers: Optional[int] = None,
+    max_speakers: Optional[int] = None,
+    language: str = "en",
+    cleanup_temp_files: bool = True
+) -> Dict[str, Any]:
     """
-    Transcription with speaker diarization (multi-speaker support).
+    Transcribe video with speaker diarization.
 
     Args:
         video_path: Path to video file
-        output_format: Output format (srt/vtt/json)
-        num_speakers: Expected speaker count (None = auto-detect)
-        min_speakers: Minimum speakers (default: 1)
-        max_speakers: Maximum speakers (default: 10)
+        output_format: Output format (srt, json, txt)
+        num_speakers: Exact number of speakers (if known)
+        min_speakers: Minimum number of speakers
+        max_speakers: Maximum number of speakers
+        language: Language code for transcription
+        cleanup_temp_files: Whether to delete temporary files
 
     Returns:
-        Dict with transcript_path, speakers_detected, duration, processing_time
+        {
+            "transcript_path": str,
+            "speakers_detected": int,
+            "duration": float,
+            "num_segments": int,
+            "speakers": List[str]
+        }
     """
-    # STUB Phase 1
-    logger.info(f"[STUB] transcribe_with_speakers called with: {video_path}")
-    logger.info(f"  num_speakers={num_speakers}, min={min_speakers}, max={max_speakers}")
+    from video_tools_mcp.processing import transcribe_video_file
+    from video_tools_mcp.processing.diarization_merge import (
+        merge_transcription_with_diarization,
+        format_speaker_transcript
+    )
+    from video_tools_mcp.processing.audio_extraction import extract_audio
+    from video_tools_mcp.models.pyannote import PyannoteModel
+    from video_tools_mcp.utils.srt_utils import write_srt_file
 
-    # TODO Phase 2: Integrate with transcribe_speaker_diarization.py
-    # - Extract audio from video
-    # - Run Parakeet TDT + diarization model
-    # - Cluster speakers (auto-detect or use num_speakers)
-    # - Format with speaker labels
+    logger.info(f"Starting speaker diarization for: {video_path}")
 
-    return {
-        "transcript_path": f"{video_path}.speakers.{output_format}",
-        "speakers_detected": num_speakers or 2,
-        "duration": 120.5,
-        "processing_time": 45.3
-    }
+    # 1. Validate video file
+    video_path = Path(video_path)
+    if not video_path.exists():
+        raise ValueError(f"Video file not found: {video_path}")
+
+    # 2. Extract audio (temporary file)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_audio:
+        audio_path = tmp_audio.name
+
+    try:
+        extract_audio(str(video_path), audio_path)
+
+        # 3. Run transcription
+        logger.info("Running transcription with Parakeet...")
+        transcription_result = transcribe_video_file(
+            str(video_path),
+            language=language,
+            cleanup_temp_files=False  # We'll manage cleanup
+        )
+
+        # 4. Run diarization
+        logger.info("Running speaker diarization with Pyannote...")
+        pyannote = PyannoteModel()
+        pyannote.ensure_loaded()
+        diarization_result = pyannote.diarize(
+            audio_path,
+            num_speakers=num_speakers,
+            min_speakers=min_speakers,
+            max_speakers=max_speakers
+        )
+
+        # 5. Merge transcription with diarization
+        logger.info("Merging transcription with speaker labels...")
+        merged_segments = merge_transcription_with_diarization(
+            transcription_result,
+            diarization_result
+        )
+
+        # 6. Format with speaker prefixes
+        formatted_segments = format_speaker_transcript(merged_segments)
+
+        # 7. Generate output file
+        output_path = video_path.with_suffix(f".speakers.{output_format}")
+
+        if output_format == "srt":
+            write_srt_file(formatted_segments, str(output_path))
+        elif output_format == "json":
+            with open(output_path, 'w') as f:
+                json.dump({
+                    "segments": formatted_segments,
+                    "speakers": diarization_result["speakers"],
+                    "num_speakers": diarization_result["num_speakers"],
+                    "duration": transcription_result["duration"]
+                }, f, indent=2)
+        elif output_format == "txt":
+            with open(output_path, 'w') as f:
+                for seg in formatted_segments:
+                    f.write(f"{seg['text']}\n")
+
+        # 8. Cleanup
+        if cleanup_temp_files:
+            Path(audio_path).unlink(missing_ok=True)
+
+        logger.info(f"Speaker diarization complete: {output_path}")
+
+        return {
+            "transcript_path": str(output_path),
+            "speakers_detected": diarization_result["num_speakers"],
+            "speakers": diarization_result["speakers"],
+            "duration": transcription_result["duration"],
+            "num_segments": len(formatted_segments),
+            "output_format": output_format
+        }
+
+    finally:
+        # Ensure cleanup even if errors occur
+        if cleanup_temp_files and Path(audio_path).exists():
+            Path(audio_path).unlink(missing_ok=True)
 
 
 @mcp.tool()
@@ -199,38 +286,71 @@ def extract_smart_screenshots(
 @mcp.tool()
 def rename_speakers(
     srt_path: str,
-    speaker_map: dict,
+    speaker_map: Dict[str, str],
     output_path: Optional[str] = None,
-    backup: bool = True
-) -> dict:
+    create_backup: bool = True
+) -> Dict[str, Any]:
     """
-    Bulk rename speaker labels in SRT files.
+    Rename speakers in an SRT file.
 
     Args:
-        srt_path: Path to SRT file
-        speaker_map: Dict mapping old names to new (e.g., {"Speaker 1": "Autumn"})
-        output_path: Output path (default: overwrite original)
-        backup: Create .bak file (default: True)
+        srt_path: Path to SRT file with speaker labels
+        speaker_map: Mapping of old to new speaker names (e.g., {"SPEAKER_00": "Alice", "SPEAKER_01": "Bob"})
+        output_path: Output path (defaults to overwriting input file)
+        create_backup: Whether to create a backup of the original file
 
     Returns:
-        Dict with output_path, replacements_made, backup_path
+        {
+            "output_path": str,
+            "replacements_made": int,
+            "backup_path": Optional[str],
+            "speakers_renamed": List[str]
+        }
     """
-    # STUB Phase 1
-    logger.info(f"[STUB] rename_speakers called with: {srt_path}")
-    logger.info(f"  speaker_map={speaker_map}, backup={backup}")
+    from video_tools_mcp.utils.srt_utils import parse_srt_file, write_srt_file
 
-    # TODO Phase 2: Implement real SRT renaming
-    # - Parse SRT file
-    # - Replace speaker labels using speaker_map
-    # - Save to output_path (or overwrite)
-    # - Create backup if requested
+    logger.info(f"Renaming speakers in: {srt_path}")
 
-    backup_path = f"{srt_path}.bak" if backup else None
+    # 1. Validate input file
+    srt_path = Path(srt_path)
+    if not srt_path.exists():
+        raise ValueError(f"SRT file not found: {srt_path}")
+
+    # 2. Parse SRT file
+    segments = parse_srt_file(str(srt_path))
+
+    # 3. Create backup if requested
+    backup_path = None
+    if create_backup:
+        backup_path = str(srt_path) + ".bak"
+        shutil.copy(str(srt_path), backup_path)
+        logger.info(f"Created backup: {backup_path}")
+
+    # 4. Apply speaker name replacements
+    replacements_made = 0
+    speakers_renamed = set()
+
+    for segment in segments:
+        text = segment["text"]
+        for old_name, new_name in speaker_map.items():
+            # Match speaker prefix (e.g., "SPEAKER_00: ")
+            if text.startswith(f"{old_name}:"):
+                segment["text"] = text.replace(f"{old_name}:", f"{new_name}:", 1)
+                replacements_made += 1
+                speakers_renamed.add(old_name)
+                break
+
+    # 5. Write updated SRT file
+    output = output_path or str(srt_path)
+    write_srt_file(segments, output)
+
+    logger.info(f"Speaker renaming complete: {replacements_made} replacements made")
 
     return {
-        "output_path": output_path or srt_path,
-        "replacements_made": len(speaker_map),
-        "backup_path": backup_path
+        "output_path": output,
+        "replacements_made": replacements_made,
+        "backup_path": backup_path,
+        "speakers_renamed": sorted(list(speakers_renamed))
     }
 
 
