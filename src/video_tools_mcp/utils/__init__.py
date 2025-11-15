@@ -17,6 +17,13 @@ from .srt_utils import (
     format_timestamp,
     parse_timestamp,
 )
+from .image_utils import (
+    compute_phash,
+    calculate_similarity,
+    is_duplicate,
+    deduplicate_frames,
+    get_unique_frames_with_metadata,
+)
 
 __all__ = [
     'AudioExtractionError',
@@ -32,4 +39,9 @@ __all__ = [
     'parse_srt_file',
     'format_timestamp',
     'parse_timestamp',
+    'compute_phash',
+    'calculate_similarity',
+    'is_duplicate',
+    'deduplicate_frames',
+    'get_unique_frames_with_metadata',
 ]
