@@ -37,7 +37,7 @@ class TestBasicTranscription:
         # - Parse SRT and validate format
         # - Check that transcript is not empty
         # - Verify timestamps are sequential
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Waiting for Phase 2 implementation of transcribe_video tool")
 
     def test_transcribe_short_video_json(self, check_test_videos):
         """Test basic transcription with JSON output."""
@@ -45,7 +45,7 @@ class TestBasicTranscription:
         # - Call transcribe_video with output_format="json"
         # - Load and validate JSON structure
         # - Check for required fields: segments, duration, etc.
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Waiting for Phase 2 implementation of transcribe_video tool")
 
     def test_transcribe_short_video_txt(self, check_test_videos):
         """Test basic transcription with plain text output."""
@@ -53,7 +53,7 @@ class TestBasicTranscription:
         # - Call transcribe_video with output_format="txt"
         # - Verify text file contains transcript
         # - Check for reasonable word count
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Waiting for Phase 2 implementation of transcribe_video tool")
 
 
 class TestSpeakerDiarization:
@@ -95,7 +95,7 @@ class TestPerformanceBenchmarks:
         # - Calculate real-time factor (processing_time / video_duration)
         # - Assert RTF < 0.1 (10x faster than real-time on M4)
         # - Log results for benchmarking documentation
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Waiting for Phase 2 implementation of transcribe_video tool")
 
     def test_diarization_speed(self, check_test_videos):
         """Measure diarization processing speed."""
@@ -103,7 +103,7 @@ class TestPerformanceBenchmarks:
         # - Process MULTI_SPEAKER_VIDEO with speakers
         # - Measure total processing time
         # - Log results for documentation
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Already tested in test_speaker_diarization_integration.py")
 
 
 # TODO Phase 6: Add more edge case tests

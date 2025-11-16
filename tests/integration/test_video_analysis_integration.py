@@ -35,14 +35,14 @@ class TestVideoAnalysis:
         # - Load and validate JSON structure
         # - Check frames_analyzed > 0
         # - Verify per-frame analyses have timestamps
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Waiting for Phase 4 implementation of analyze_video tool")
 
     def test_analyze_video_custom_prompt(self, check_test_videos):
         """Test video analysis with custom analysis prompt."""
         # TODO Phase 6: Implement
         # - Call with custom prompt like "Identify all text visible in frames"
         # - Verify analyses contain text detection results
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Waiting for Phase 4 implementation of analyze_video tool")
 
     def test_analyze_video_sample_interval(self, check_test_videos):
         """Test different sample intervals."""
@@ -51,14 +51,14 @@ class TestVideoAnalysis:
         # - Call with sample_interval=10 (every 10 seconds)
         # - Verify frame counts match expectations
         # - Compare processing times
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Waiting for Phase 4 implementation of analyze_video tool")
 
     def test_analyze_video_max_frames(self, check_test_videos):
         """Test max_frames limit."""
         # TODO Phase 6: Implement
         # - Call with max_frames=10
         # - Verify exactly 10 frames analyzed
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Waiting for Phase 4 implementation of analyze_video tool")
 
 
 class TestSmartScreenshots:
@@ -72,7 +72,7 @@ class TestSmartScreenshots:
         # - Check that screenshot files exist
         # - Verify metadata.json is created and valid
         # - Check that screenshots > 0
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Already tested in test_screenshot_extraction_integration.py")
 
     def test_screenshots_deduplication(self, check_test_videos):
         """Test pHash deduplication."""
@@ -81,14 +81,14 @@ class TestSmartScreenshots:
         # - Extract again with threshold=0.95 (stricter)
         # - Verify stricter threshold results in more screenshots kept
         # - Check metadata shows duplicates_removed count
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Already tested in test_screenshot_extraction_integration.py")
 
     def test_screenshots_custom_prompt(self, check_test_videos):
         """Test custom extraction prompt."""
         # TODO Phase 6: Implement
         # - Use prompt like "Only keep frames with visible text"
         # - Verify AI reasoning in metadata mentions text presence
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Already tested in test_screenshot_extraction_integration.py")
 
     def test_screenshots_output_quality(self, check_test_videos):
         """Test screenshot output quality and captions."""
@@ -100,14 +100,14 @@ class TestSmartScreenshots:
         #   - timestamp
         #   - ai_reasoning
         # - Check JPEG quality is high (file size reasonable)
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Already tested in test_screenshot_extraction_integration.py")
 
     def test_screenshots_max_limit(self, check_test_videos):
         """Test max_screenshots parameter."""
         # TODO Phase 6: Implement
         # - Call with max_screenshots=5
         # - Verify <= 5 screenshots extracted
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Already tested in test_screenshot_extraction_integration.py")
 
 
 class TestPerformanceBenchmarks:
@@ -121,7 +121,7 @@ class TestPerformanceBenchmarks:
         # - Calculate frames per second
         # - Assert ~2-3 fps on M4
         # - Log results for documentation
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Waiting for Phase 4 implementation of analyze_video tool")
 
     def test_screenshot_extraction_speed(self, check_test_videos):
         """Measure screenshot extraction speed."""
@@ -130,7 +130,7 @@ class TestPerformanceBenchmarks:
         # - Measure total processing time
         # - Log frames processed, duplicates removed, screenshots kept
         # - Calculate effective fps
-        pytest.skip("TODO: Implement in Phase 6")
+        pytest.skip("Already tested in test_screenshot_extraction_integration.py")
 
 
 # TODO Phase 6: Add more edge case tests

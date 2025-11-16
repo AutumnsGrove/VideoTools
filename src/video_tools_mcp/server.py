@@ -132,7 +132,7 @@ def transcribe_with_speakers(
         transcription_result = transcribe_video_file(
             str(video_path),
             language=language,
-            cleanup_temp_files=False  # We'll manage cleanup
+            cleanup=False  # We'll manage cleanup
         )
 
         # 4. Run diarization
