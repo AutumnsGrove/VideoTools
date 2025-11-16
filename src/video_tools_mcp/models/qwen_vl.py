@@ -18,7 +18,7 @@ class QwenVLModel(ModelManager):
     Phase 1: Stub implementation with interface definition
     Phase 4: Actual model loading and frame analysis
 
-    Model: mlx-community/Qwen2-VL-8B-Instruct-8bit
+    Model: lmstudio-community/Qwen3-VL-8B-Instruct-MLX-8bit
     Purpose: Vision-language model for analyzing video frames
     Capabilities: Scene description, object detection, action recognition
     """
@@ -26,7 +26,7 @@ class QwenVLModel(ModelManager):
     def __init__(self):
         """Initialize Qwen VL model configuration."""
         super().__init__()
-        self.model_id = "mlx-community/Qwen2-VL-8B-Instruct-8bit"
+        self.model_id = "lmstudio-community/Qwen3-VL-8B-Instruct-MLX-8bit"
         self._model = None
         self._processor = None
 

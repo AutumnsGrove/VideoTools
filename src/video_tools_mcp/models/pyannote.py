@@ -159,28 +159,48 @@ class PyannoteModel(ModelManager):
 
         logger.info(f"Performing diarization on: {audio_path}")
 
-        # Run diarization
+        # Pre-load audio using soundfile to avoid torchcodec dependency
+        # Pyannote accepts audio as {'waveform': tensor, 'sample_rate': int}
+        import soundfile as sf
+        import numpy as np
+
+        # Load audio with soundfile (returns numpy array)
+        audio_data, sample_rate = sf.read(audio_path)
+
+        # Convert to torch tensor and ensure shape is (channels, samples)
+        waveform = torch.from_numpy(audio_data).float()
+        if waveform.ndim == 1:
+            # Mono audio - add channel dimension
+            waveform = waveform.unsqueeze(0)
+        else:
+            # Stereo/multi-channel - transpose to (channels, samples)
+            waveform = waveform.T
+
+        audio_dict = {
+            "waveform": waveform,
+            "sample_rate": sample_rate
+        }
+
+        # Run diarization with pre-loaded audio
         diarization = self._pipeline(
-            audio_path,
+            audio_dict,
             num_speakers=num_speakers,
             min_speakers=min_speakers,
             max_speakers=max_speakers
         )
 
-        # Convert pyannote output to our format
-        segments = []
-        speakers = set()
+        # Convert pyannote 4.0 output to our format
+        # Pyannote 4.0 returns DiarizeOutput object with serialize() method
+        serialized = diarization.serialize()
 
-        for turn, _, speaker in diarization.itertracks(yield_label=True):
-            segments.append({
-                "start": float(turn.start),
-                "end": float(turn.end),
-                "speaker": speaker
-            })
-            speakers.add(speaker)
+        # Use 'diarization' key (non-overlapping segments)
+        segments = serialized.get('diarization', [])
+
+        # Extract unique speakers
+        speakers = set(seg['speaker'] for seg in segments)
 
         result = {
-            "segments": segments,
+            "segments": segments,  # Already in correct format with start, end, speaker
             "speakers": sorted(list(speakers)),
             "num_speakers": len(speakers)
         }

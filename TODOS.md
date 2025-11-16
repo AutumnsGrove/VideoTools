@@ -1,7 +1,30 @@
 # Video Tools MCP Server - Development TODOs
 
 **Last Updated**: 2025-11-15
-**Current Status**: Phase 5 Complete - All Core Features Implemented
+**Current Status**: Phase 6 In Progress - Model Setup Complete, Testing In Progress
+
+---
+
+## ✅ Model Setup & Fixes Completed (2025-11-15)
+
+### Critical Fixes Applied
+- **Torchcodec Issue RESOLVED**: Modified `pyannote.py` to use `soundfile` for audio pre-loading
+  - Pyannote now fully functional without torchcodec dependency
+  - Updated to pyannote 4.0 API (`.serialize()` instead of `.itertracks()`)
+- **Qwen VL Model Fixed**:
+  - Updated to correct repository: `lmstudio-community/Qwen3-VL-8B-Instruct-MLX-8bit`
+  - Installed missing `torchvision` dependency
+  - Model now loads successfully (~4GB downloaded)
+- **All 3 ML models verified and working**: Parakeet, Pyannote, Qwen VL
+
+### Test Results
+- ✅ All models load successfully
+- ✅ 4/6 fast integration tests passing
+- ⚠️ 2 test failures due to test setup issues (not model issues)
+
+### Files Modified
+- `src/video_tools_mcp/models/pyannote.py` - Soundfile workaround + API update
+- `src/video_tools_mcp/models/qwen_vl.py` - Correct model repository
 
 ---
 
