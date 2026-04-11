@@ -1,0 +1,7 @@
+{
+  "source": "/path/to/your/DCIM",
+  "destination": "/path/to/your/output",
+  "workers": 8,
+  "video_extensions": [".mp4", ".mov", ".avi", ".mkv", ".m4v", ".3gp"],
+  "photo_extensions": [".jpg", ".jpeg", ".png", ".tiff", ".tif", ".heic", ".heif"]
+}

@@ -431,6 +431,19 @@ This project builds on excellent open-source work:
 - **[MLX VLM](https://github.com/Blaizzy/mlx-vlm)** - Vision-language models for Apple Silicon
 - **[FFmpeg](https://ffmpeg.org/)** - Audio/video processing foundation
 
+## Standalone Tools
+
+### [CameraSync](CameraSync/)
+
+Fast, concurrent media file syncer written in Go. Copies photos and videos from a camera's SD card to an organized date-based folder structure. Single binary, zero dependencies.
+
+```bash
+cd CameraSync && go build -o camera-sync .
+camera-sync -src /Volumes/SD/DCIM -dst ~/Media
+```
+
+See [CameraSync/README.md](CameraSync/README.md) for full documentation.
+
 ## Links
 
 - **Project Spec**: [VideoTools-Project-Spec.md](VideoTools-Project-Spec.md)
