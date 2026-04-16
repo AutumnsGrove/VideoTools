@@ -37,6 +37,9 @@ secrets.json
 **/video_scan_results.md
 config.json
 
+# Go build artifacts
+CameraSync/camera-sync
+
 # MCP Server specific
 .venv/
 *.egg-info/
