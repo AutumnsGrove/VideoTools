@@ -3,5 +3,14 @@
   "destination": "/path/to/your/output",
   "workers": 8,
   "video_extensions": [".mp4", ".mov", ".avi", ".mkv", ".m4v", ".3gp"],
-  "photo_extensions": [".jpg", ".jpeg", ".png", ".tiff", ".tif", ".heic", ".heif"]
+  "photo_extensions": [".jpg", ".jpeg", ".png", ".tiff", ".tif", ".heic", ".heif"],
+  "compression": {
+    "prompt_after_sync": true,
+    "min_size_mb": 100,
+    "segment_threshold_mb": 1024,
+    "segment_duration_sec": 30,
+    "bitrate_reduction": 0.3,
+    "audio_bitrate_kbps": 128,
+    "segment_workers": 4
+  }
 }
