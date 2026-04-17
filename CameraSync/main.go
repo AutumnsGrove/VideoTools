@@ -305,7 +305,7 @@ func totalBytes(paths []string) int64 {
 }
 
 // runInstall rebuilds the camera-sync binary from source and installs it
-// to $GOPATH/bin so it's available on PATH.
+// to wherever the current binary lives on PATH.
 //
 // Usage: camera-sync install --source
 //
@@ -313,7 +313,7 @@ func totalBytes(paths []string) int64 {
 // directly with the Go toolchain:
 //
 //	go build -o camera-sync .
-//	go build -o "$GOPATH/bin/camera-sync" .
+//	sudo go build -o /usr/local/bin/camera-sync .
 func runInstall(args []string) {
 	fs := flag.NewFlagSet("install", flag.ExitOnError)
 	source := fs.Bool("source", false, "rebuild from source (required)")
@@ -353,23 +353,40 @@ func runInstall(args []string) {
 	}
 	fmt.Printf("Built %s in %s\n", binPath, time.Since(start).Round(time.Millisecond))
 
-	// Also build to $GOPATH/bin so `camera-sync` works from anywhere.
-	// We build a second time instead of copying because macOS quarantines
-	// copied binaries (com.apple.provenance xattr), causing SIGKILL.
-	gopath := os.Getenv("GOPATH")
-	if gopath == "" {
-		gopath = filepath.Join(os.Getenv("HOME"), "go")
+	// Find where the running binary lives on PATH and install there.
+	// This handles /usr/local/bin, $GOPATH/bin, or wherever it was
+	// originally installed. We build a second time instead of copying
+	// because macOS quarantines copied binaries (com.apple.provenance
+	// xattr), causing SIGKILL.
+	installPath, err := exec.LookPath(binName)
+	if err != nil {
+		// Not on PATH yet — fall back to /usr/local/bin.
+		installPath = filepath.Join("/usr/local/bin", binName)
 	}
-	gopathBin := filepath.Join(gopath, "bin", binName)
-	pathCmd := exec.Command("go", "build", "-o", gopathBin, ".")
+	// Resolve symlinks to get the real path.
+	if resolved, err := filepath.EvalSymlinks(installPath); err == nil {
+		installPath = resolved
+	}
+
+	fmt.Printf("Installing to %s...\n", installPath)
+	pathCmd := exec.Command("go", "build", "-o", installPath, ".")
 	pathCmd.Dir = wd
 	pathCmd.Stdout = os.Stdout
 	pathCmd.Stderr = os.Stderr
 	if err := pathCmd.Run(); err != nil {
-		fmt.Printf("Warning: couldn't install to %s: %v\n", gopathBin, err)
-	} else {
-		fmt.Printf("Installed to %s\n", gopathBin)
+		// Permission denied — retry with sudo.
+		fmt.Println("Permission denied, retrying with sudo...")
+		sudoCmd := exec.Command("sudo", "go", "build", "-o", installPath, ".")
+		sudoCmd.Dir = wd
+		sudoCmd.Stdout = os.Stdout
+		sudoCmd.Stderr = os.Stderr
+		sudoCmd.Stdin = os.Stdin // allow password prompt
+		if err := sudoCmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Install failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Manual fallback: sudo go build -o %s .\n", installPath)
+			os.Exit(1)
+		}
 	}
-
+	fmt.Printf("Installed to %s\n", installPath)
 	fmt.Println("Done. Run 'camera-sync' to start.")
 }
