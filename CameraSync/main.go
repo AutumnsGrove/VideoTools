@@ -135,6 +135,7 @@ func main() {
 	compressFlag := flag.Bool("compress", false, "compress after sync without prompting")
 	noCompressFlag := flag.Bool("no-compress", false, "skip compression entirely")
 	compressAllFlag := flag.Bool("compress-all", false, "skip sync; compress all videos on destination")
+	compressDirFlag := flag.String("compress-dir", "", "skip sync; compress all uncompressed videos in a directory")
 	compressFileFlag := flag.String("compress-file", "", "skip sync; compress a single file and exit")
 	flag.Parse()
 
@@ -177,6 +178,20 @@ func main() {
 			labelStyle.Render("  Target:      ") + valueStyle.Render(*compressFileFlag))
 		fmt.Println()
 		if err := runCompressFile(ctx, cfg, *compressFileFlag); err != nil {
+			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Mode: --compress-dir <path>
+	if *compressDirFlag != "" {
+		lipgloss.Println(
+			labelStyle.Render("  Mode:        ") + valueStyle.Render("compress-dir"))
+		lipgloss.Println(
+			labelStyle.Render("  Directory:   ") + valueStyle.Render(*compressDirFlag))
+		fmt.Println()
+		if err := runCompressDir(ctx, cfg, *compressDirFlag); err != nil {
 			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
 			os.Exit(1)
 		}

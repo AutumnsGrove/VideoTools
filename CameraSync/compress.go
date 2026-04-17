@@ -25,6 +25,7 @@ type probeInfo struct {
 	durationSec          float64
 	bitrateBps           int64
 	sizeBytes            int64
+	videoCodec           string  // codec name of the main video stream (e.g. "h264", "hevc")
 	frameRate            float64 // frames per second for the main video stream
 	totalFrames          int64   // estimated total frames (from duration * frameRate)
 	hasAttachedPic       bool
@@ -122,6 +123,9 @@ func probe(path string) (probeInfo, error) {
 			info.hasAttachedPic = true
 			info.attachedPicStreamIdx = s.Index
 			continue
+		}
+		if info.videoCodec == "" {
+			info.videoCodec = s.CodecName
 		}
 		if info.frameRate == 0 {
 			info.frameRate = parseFraction(s.RFrameRate)
@@ -440,6 +444,115 @@ func runCompressAll(ctx context.Context, cfg config) error {
 	fmt.Println()
 
 	return runCompression(ctx, cfg, videos)
+}
+
+// isAlreadyCompressed probes a video and returns true if it's already HEVC
+// (our compression target codec) or if its bitrate is already at/below the
+// target we'd set. Returns (compressed, codec, bitrateBps, error).
+func isAlreadyCompressed(path string, cfg config) (bool, string, int64, error) {
+	info, err := probe(path)
+	if err != nil {
+		return false, "", 0, err
+	}
+	codec := info.videoCodec
+	// Already HEVC — we compressed this.
+	if codec == "hevc" || codec == "h265" {
+		return true, codec, info.bitrateBps, nil
+	}
+	// Bitrate already at or below what we'd target — no meaningful gain.
+	targetBps := int64(float64(info.bitrateBps) * cfg.Compression.BitrateReduction)
+	if targetBps < 500_000 {
+		return true, codec, info.bitrateBps, nil
+	}
+	return false, codec, info.bitrateBps, nil
+}
+
+// runCompressDir walks a directory and compresses all uncompressed videos in it.
+func runCompressDir(ctx context.Context, cfg config, dir string) error {
+	minBytes := int64(cfg.Compression.MinSizeMB) * 1024 * 1024
+
+	lipgloss.Print(timestamp() + " " + infoStyle.Render("Scanning directory for video files..."))
+	scanStart := time.Now()
+
+	var allVideos []string
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			// Skip hidden dirs (our .compress-* work dirs).
+			if d.Name() != filepath.Base(dir) && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !isVideoPath(path) {
+			return nil
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil
+		}
+		if info.Size() >= minBytes {
+			allVideos = append(allVideos, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	lipgloss.Println(" " + successStyle.Render(fmt.Sprintf("found %d video(s)", len(allVideos))) +
+		" " + dimStyle.Render(fmt.Sprintf("(%s)", time.Since(scanStart).Round(time.Millisecond))))
+
+	if len(allVideos) == 0 {
+		lipgloss.Println(dimStyle.Render(fmt.Sprintf("No videos ≥ %d MB found in %s.", cfg.Compression.MinSizeMB, dir)))
+		return nil
+	}
+
+	// Probe each file to check if already compressed.
+	lipgloss.Print(timestamp() + " " + infoStyle.Render("Probing codecs..."))
+	var eligible []string
+	var skippedCount int
+	for _, path := range allVideos {
+		compressed, _, _, err := isAlreadyCompressed(path, cfg)
+		if err != nil {
+			// Can't probe — skip it.
+			skippedCount++
+			continue
+		}
+		if compressed {
+			skippedCount++
+			continue
+		}
+		eligible = append(eligible, path)
+	}
+	lipgloss.Println(" " + successStyle.Render(fmt.Sprintf("%d to compress", len(eligible))) +
+		dimStyle.Render(fmt.Sprintf(", %d already compressed", skippedCount)))
+	fmt.Println()
+
+	if len(eligible) == 0 {
+		lipgloss.Println(dimStyle.Render("All videos in this directory are already compressed."))
+		return nil
+	}
+
+	// Sort by size descending.
+	sort.Slice(eligible, func(i, j int) bool {
+		si, _ := os.Stat(eligible[i])
+		sj, _ := os.Stat(eligible[j])
+		return si.Size() > sj.Size()
+	})
+
+	totalSize := totalBytes(eligible)
+	lipgloss.Println(infoStyle.Render(fmt.Sprintf(
+		"%d video(s) eligible for compression (%s total).", len(eligible), formatBytes(totalSize))))
+
+	if !promptYesNo("Compress now?", false) {
+		lipgloss.Println(dimStyle.Render("Cancelled."))
+		return nil
+	}
+	fmt.Println()
+
+	return runCompression(ctx, cfg, eligible)
 }
 
 // -------- Per-file compression --------
