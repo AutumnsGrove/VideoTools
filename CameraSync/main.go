@@ -7,10 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	lipgloss "charm.land/lipgloss/v2"
 )
@@ -120,6 +122,12 @@ func promptYesNo(question string, defaultYes bool) bool {
 }
 
 func main() {
+	// Subcommand: camera-sync install --source
+	if len(os.Args) >= 2 && os.Args[1] == "install" {
+		runInstall(os.Args[2:])
+		return
+	}
+
 	configPath := flag.String("config", "", "path to config.json")
 	srcFlag := flag.String("src", "", "source DCIM path (overrides config)")
 	dstFlag := flag.String("dst", "", "destination base path (overrides config)")
@@ -294,4 +302,74 @@ func totalBytes(paths []string) int64 {
 		}
 	}
 	return total
+}
+
+// runInstall rebuilds the camera-sync binary from source and installs it
+// to $GOPATH/bin so it's available on PATH.
+//
+// Usage: camera-sync install --source
+//
+// BOOTSTRAP: If the binary is broken and can't run this command, rebuild
+// directly with the Go toolchain:
+//
+//	go build -o camera-sync .
+//	go build -o "$GOPATH/bin/camera-sync" .
+func runInstall(args []string) {
+	fs := flag.NewFlagSet("install", flag.ExitOnError)
+	source := fs.Bool("source", false, "rebuild from source (required)")
+	fs.Parse(args)
+
+	if !*source {
+		fmt.Println("Usage: camera-sync install --source")
+		fmt.Println("  Rebuilds and installs camera-sync from source.")
+		return
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if _, err := os.Stat(filepath.Join(wd, "go.mod")); os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "Error: not in the camera-sync source directory (no go.mod found in %s)\n", wd)
+		os.Exit(1)
+	}
+
+	binName := "camera-sync"
+
+	// Build to project directory.
+	binPath := filepath.Join(wd, binName)
+	fmt.Printf("Building %s from source...\n", binName)
+	start := time.Now()
+
+	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
+	buildCmd.Dir = wd
+	buildCmd.Stdout = os.Stdout
+	buildCmd.Stderr = os.Stderr
+	if err := buildCmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Build failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Built %s in %s\n", binPath, time.Since(start).Round(time.Millisecond))
+
+	// Also build to $GOPATH/bin so `camera-sync` works from anywhere.
+	// We build a second time instead of copying because macOS quarantines
+	// copied binaries (com.apple.provenance xattr), causing SIGKILL.
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		gopath = filepath.Join(os.Getenv("HOME"), "go")
+	}
+	gopathBin := filepath.Join(gopath, "bin", binName)
+	pathCmd := exec.Command("go", "build", "-o", gopathBin, ".")
+	pathCmd.Dir = wd
+	pathCmd.Stdout = os.Stdout
+	pathCmd.Stderr = os.Stderr
+	if err := pathCmd.Run(); err != nil {
+		fmt.Printf("Warning: couldn't install to %s: %v\n", gopathBin, err)
+	} else {
+		fmt.Printf("Installed to %s\n", gopathBin)
+	}
+
+	fmt.Println("Done. Run 'camera-sync' to start.")
 }
