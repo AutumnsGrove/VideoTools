@@ -20,6 +20,9 @@ import (
 	lipgloss "charm.land/lipgloss/v2"
 )
 
+// compressedByUs is the metadata comment tag we embed in files we compress.
+const compressedByUs = "camera-sync/compressed"
+
 // probeInfo holds what we need about an input file.
 type probeInfo struct {
 	durationSec          float64
@@ -30,6 +33,7 @@ type probeInfo struct {
 	totalFrames          int64   // estimated total frames (from duration * frameRate)
 	hasAttachedPic       bool
 	attachedPicStreamIdx int
+	comment              string // format-level "comment" tag, used to detect our compressed files
 }
 
 type compressionError struct {
@@ -66,9 +70,10 @@ func probe(path string) (probeInfo, error) {
 	}
 	var data struct {
 		Format struct {
-			Duration string `json:"duration"`
-			BitRate  string `json:"bit_rate"`
-			Size     string `json:"size"`
+			Duration string            `json:"duration"`
+			BitRate  string            `json:"bit_rate"`
+			Size     string            `json:"size"`
+			Tags     map[string]string `json:"tags"`
 		} `json:"format"`
 		Streams []struct {
 			Index        int            `json:"index"`
@@ -95,6 +100,7 @@ func probe(path string) (probeInfo, error) {
 	if data.Format.Size != "" {
 		info.sizeBytes, _ = strconv.ParseInt(data.Format.Size, 10, 64)
 	}
+	info.comment = data.Format.Tags["comment"]
 
 	// Fallback: sum video-stream bitrates (skipping attached_pic) if format bitrate absent.
 	if info.bitrateBps == 0 {
@@ -484,13 +490,13 @@ func isAlreadyCompressed(path string, cfg config) (bool, string, int64, error) {
 		return false, "", 0, err
 	}
 	codec := info.videoCodec
-	// Already HEVC — we compressed this.
-	if codec == "hevc" || codec == "h265" {
+	// If we embedded our tag, this file was compressed by us — skip it.
+	if info.comment == compressedByUs {
 		return true, codec, info.bitrateBps, nil
 	}
-	// Bitrate already at or below what we'd target — no meaningful gain.
+	// Bitrate already at or below our 15 Mbps floor — compression won't help.
 	targetBps := int64(float64(info.bitrateBps) * cfg.Compression.BitrateReduction)
-	if targetBps < 500_000 {
+	if targetBps < 15_000_000 {
 		return true, codec, info.bitrateBps, nil
 	}
 	return false, codec, info.bitrateBps, nil
@@ -605,9 +611,10 @@ func compressOne(ctx context.Context, cfg config, srcPath, encoder string, idx, 
 	origSize := origStat.Size()
 
 	// Target bitrate: reduction fraction of original (total bitrate).
+	// Floor at 15 Mbps to preserve reasonable quality.
 	targetKbps := int(float64(info.bitrateBps) / 1000.0 * cfg.Compression.BitrateReduction)
-	if targetKbps < 500 {
-		targetKbps = 500
+	if targetKbps < 15000 {
+		targetKbps = 15000
 	}
 	audioKbps := cfg.Compression.AudioBitrateKbps
 	if audioKbps <= 0 {
@@ -721,6 +728,7 @@ func compressDirect(ctx context.Context, src, dst, encoder string, videoKbps, au
 		"-b:v:0", fmt.Sprintf("%dk", videoKbps),
 		"-c:a", "aac",
 		"-b:a", fmt.Sprintf("%dk", audioKbps),
+		"-metadata", "comment=" + compressedByUs,
 		"-movflags", "+faststart",
 		"-progress", "pipe:1",
 		"-y",
@@ -893,6 +901,7 @@ func compressSegmented(ctx context.Context, cfg config, src, dst, encoder string
 		"-map_metadata", "1",
 		"-c", "copy",
 		"-tag:v:0", "hvc1",
+		"-metadata", "comment="+compressedByUs,
 		"-movflags", "+faststart",
 	)
 	if info.hasAttachedPic {
