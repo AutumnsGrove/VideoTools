@@ -198,14 +198,18 @@ func main() {
 		return
 	}
 
-	// Mode: --compress-all
+	// Mode: --compress-all [optional path]
 	if *compressAllFlag {
+		scanRoot := cfg.Destination
+		if args := flag.Args(); len(args) > 0 {
+			scanRoot = args[0]
+		}
 		lipgloss.Println(
 			labelStyle.Render("  Mode:        ") + valueStyle.Render("compress-all (backprop)"))
 		lipgloss.Println(
-			labelStyle.Render("  Destination: ") + valueStyle.Render(cfg.Destination))
+			labelStyle.Render("  Destination: ") + valueStyle.Render(scanRoot))
 		fmt.Println()
-		if err := runCompressAll(ctx, cfg); err != nil {
+		if err := runCompressAll(ctx, cfg, scanRoot); err != nil {
 			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
 			os.Exit(1)
 		}

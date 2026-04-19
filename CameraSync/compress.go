@@ -388,18 +388,23 @@ func runCompressFile(ctx context.Context, cfg config, path string) error {
 	return runCompression(ctx, cfg, []string{path})
 }
 
-// runCompressAll walks the destination tree and compresses all videos >= min size.
-func runCompressAll(ctx context.Context, cfg config) error {
-	var videos []string
+// runCompressAll walks the given root tree and compresses all videos >= min size,
+// skipping files that are already HEVC-encoded or have low enough bitrate.
+func runCompressAll(ctx context.Context, cfg config, root string) error {
+	var allVideos []string
 	minBytes := int64(cfg.Compression.MinSizeMB) * 1024 * 1024
 
 	lipgloss.Print(timestamp() + " " + infoStyle.Render("Scanning destination for video files..."))
 	scanStart := time.Now()
-	err := filepath.WalkDir(cfg.Destination, func(path string, d os.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 		if d.IsDir() {
+			// Skip hidden dirs (our .compress-* work dirs).
+			if d.Name() != filepath.Base(root) && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !isVideoPath(path) {
@@ -410,32 +415,56 @@ func runCompressAll(ctx context.Context, cfg config) error {
 			return nil
 		}
 		if info.Size() >= minBytes {
-			videos = append(videos, path)
+			allVideos = append(allVideos, path)
 		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	lipgloss.Println(" " + successStyle.Render(fmt.Sprintf("found %d candidates", len(videos))) +
+	lipgloss.Println(" " + successStyle.Render(fmt.Sprintf("found %d candidates", len(allVideos))) +
 		" " + dimStyle.Render(fmt.Sprintf("(%s)", time.Since(scanStart).Round(time.Millisecond))))
-	fmt.Println()
 
-	if len(videos) == 0 {
+	if len(allVideos) == 0 {
 		lipgloss.Println(dimStyle.Render(fmt.Sprintf("No videos ≥ %d MB found.", cfg.Compression.MinSizeMB)))
 		return nil
 	}
 
+	// Probe each file to check if already compressed.
+	lipgloss.Print(timestamp() + " " + infoStyle.Render("Probing codecs..."))
+	var eligible []string
+	var skippedCount int
+	for _, path := range allVideos {
+		compressed, _, _, err := isAlreadyCompressed(path, cfg)
+		if err != nil {
+			skippedCount++
+			continue
+		}
+		if compressed {
+			skippedCount++
+			continue
+		}
+		eligible = append(eligible, path)
+	}
+	lipgloss.Println(" " + successStyle.Render(fmt.Sprintf("%d to compress", len(eligible))) +
+		dimStyle.Render(fmt.Sprintf(", %d already compressed", skippedCount)))
+	fmt.Println()
+
+	if len(eligible) == 0 {
+		lipgloss.Println(dimStyle.Render("All videos are already compressed."))
+		return nil
+	}
+
 	// Sort by size descending so big wins come first (user visibility).
-	sort.Slice(videos, func(i, j int) bool {
-		si, _ := os.Stat(videos[i])
-		sj, _ := os.Stat(videos[j])
+	sort.Slice(eligible, func(i, j int) bool {
+		si, _ := os.Stat(eligible[i])
+		sj, _ := os.Stat(eligible[j])
 		return si.Size() > sj.Size()
 	})
 
-	totalSize := totalBytes(videos)
+	totalSize := totalBytes(eligible)
 	lipgloss.Println(infoStyle.Render(fmt.Sprintf(
-		"%d video(s) to compress (%s total).", len(videos), formatBytes(totalSize))))
+		"%d video(s) to compress (%s total).", len(eligible), formatBytes(totalSize))))
 
 	if !promptYesNo("Proceed?", false) {
 		lipgloss.Println(dimStyle.Render("Cancelled."))
@@ -443,7 +472,7 @@ func runCompressAll(ctx context.Context, cfg config) error {
 	}
 	fmt.Println()
 
-	return runCompression(ctx, cfg, videos)
+	return runCompression(ctx, cfg, eligible)
 }
 
 // isAlreadyCompressed probes a video and returns true if it's already HEVC
