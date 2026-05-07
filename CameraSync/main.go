@@ -28,12 +28,13 @@ type compressionConfig struct {
 }
 
 type config struct {
-	Source      string            `json:"source"`
-	Destination string            `json:"destination"`
-	Workers     int               `json:"workers"`
-	VideoExts   []string          `json:"video_extensions,omitempty"`
-	PhotoExts   []string          `json:"photo_extensions,omitempty"`
-	Compression compressionConfig `json:"compression"`
+	Source        string              `json:"source"`
+	Destination   string              `json:"destination"`
+	Workers       int                 `json:"workers"`
+	VideoExts     []string            `json:"video_extensions,omitempty"`
+	PhotoExts     []string            `json:"photo_extensions,omitempty"`
+	Compression   compressionConfig   `json:"compression"`
+	Transcription transcriptionConfig `json:"transcription"`
 }
 
 func defaultConfig() config {
@@ -49,6 +50,14 @@ func defaultConfig() config {
 			BitrateReduction:   0.3,
 			AudioBitrateKbps:   128,
 			SegmentWorkers:     4,
+		},
+		Transcription: transcriptionConfig{
+			PromptAfterCompress: true,
+			ParakeetModel:       "/Volumes/External/Models/mlx-community/parakeet-tdt-0.6b-v2",
+			JournalBaseDir:      "/Users/mini/Obsidian/AutumnsGarden/Journal",
+			AnthropicModel:      "claude-haiku-4-5-20251001",
+			EnhanceWithLLM:      true,
+			TempDir:             "/tmp/video_transcribe",
 		},
 	}
 }
@@ -137,6 +146,10 @@ func main() {
 	compressAllFlag := flag.Bool("compress-all", false, "skip sync; compress all videos on destination")
 	compressDirFlag := flag.String("compress-dir", "", "skip sync; compress all uncompressed videos in a directory")
 	compressFileFlag := flag.String("compress-file", "", "skip sync; compress a single file and exit")
+	transcribeFlag := flag.Bool("transcribe", false, "transcribe after compress without prompting")
+	noTranscribeFlag := flag.Bool("no-transcribe", false, "skip transcription entirely")
+	transcribeDirFlag := flag.String("transcribe-dir", "", "skip sync; transcribe all videos in a directory")
+	transcribeFileFlag := flag.String("transcribe-file", "", "skip sync; transcribe a single file and exit")
 	flag.Parse()
 
 	cfg, err := loadConfig(*configPath)
@@ -216,6 +229,34 @@ func main() {
 		return
 	}
 
+	// Mode: --transcribe-file <path>
+	if *transcribeFileFlag != "" {
+		lipgloss.Println(
+			labelStyle.Render("  Mode:        ") + valueStyle.Render("transcribe-file"))
+		lipgloss.Println(
+			labelStyle.Render("  Target:      ") + valueStyle.Render(*transcribeFileFlag))
+		fmt.Println()
+		if err := runTranscribeFile(ctx, cfg, *transcribeFileFlag); err != nil {
+			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Mode: --transcribe-dir <path>
+	if *transcribeDirFlag != "" {
+		lipgloss.Println(
+			labelStyle.Render("  Mode:        ") + valueStyle.Render("transcribe-dir"))
+		lipgloss.Println(
+			labelStyle.Render("  Directory:   ") + valueStyle.Render(*transcribeDirFlag))
+		fmt.Println()
+		if err := runTranscribeDir(ctx, cfg, *transcribeDirFlag); err != nil {
+			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Normal mode: sync, then optionally compress.
 	lipgloss.Println(
 		labelStyle.Render("  Source:      ") + valueStyle.Render(cfg.Source))
@@ -282,16 +323,34 @@ func main() {
 
 	if !shouldCompress {
 		lipgloss.Println(dimStyle.Render("Skipping compression."))
-		if sr.failed > 0 {
+	} else {
+		fmt.Println()
+		if err := runCompression(ctx, cfg, eligible); err != nil {
+			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Compression error: "+err.Error()))
 			os.Exit(1)
 		}
-		return
 	}
 
-	fmt.Println()
-	if err := runCompression(ctx, cfg, eligible); err != nil {
-		lipgloss.Fprintln(os.Stderr, errorStyle.Render("Compression error: "+err.Error()))
-		os.Exit(1)
+	// Transcription stage: transcribe newly copied videos.
+	if !*noTranscribeFlag && len(sr.copiedVideos) > 0 {
+		shouldTranscribe := *transcribeFlag
+		if !shouldTranscribe {
+			if cfg.Transcription.PromptAfterCompress {
+				shouldTranscribe = promptYesNo("Transcribe videos?", false)
+			}
+		}
+
+		if shouldTranscribe {
+			fmt.Println()
+			lipgloss.Println(headerStyle.Render("Transcription"))
+			fmt.Println()
+			if err := runTranscription(ctx, cfg, sr.copiedVideos); err != nil {
+				lipgloss.Fprintln(os.Stderr, errorStyle.Render("Transcription error: "+err.Error()))
+				os.Exit(1)
+			}
+		} else {
+			lipgloss.Println(dimStyle.Render("Skipping transcription."))
+		}
 	}
 
 	if sr.failed > 0 {

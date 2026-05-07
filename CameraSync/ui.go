@@ -66,6 +66,10 @@ var (
 			Foreground(lipgloss.Color("#BD93F9")).
 			Bold(true)
 
+	transcribeStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#F1FA8C")).
+				Bold(true)
+
 	headerStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#BD93F9"))
