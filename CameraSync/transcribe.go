@@ -523,17 +523,30 @@ func runTranscription(ctx context.Context, cfg config, paths []string) error {
 		ternaryStr(cfg.Transcription.EnhanceWithLLM && apiKey != "", cfg.Transcription.AnthropicModel, "disabled")))
 	fmt.Println()
 
+	// Sort by recording time (oldest first) so journal entries are chronological.
+	type videoWithTime struct {
+		path string
+		time time.Time
+	}
+	vts := make([]videoWithTime, len(paths))
+	for i, p := range paths {
+		vts[i] = videoWithTime{path: p, time: getRecordingTime(p)}
+	}
+	sort.Slice(vts, func(i, j int) bool {
+		return vts[i].time.Before(vts[j].time)
+	})
+
 	// Check for already-transcribed videos.
 	transcribed := getTranscribedVideoNames(cfg.Transcription.JournalBaseDir)
 	var eligible []string
 	var skippedCount int
-	for _, p := range paths {
-		stem := strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))
+	for _, v := range vts {
+		stem := strings.TrimSuffix(filepath.Base(v.path), filepath.Ext(v.path))
 		if transcribed[stem] {
 			skippedCount++
 			continue
 		}
-		eligible = append(eligible, p)
+		eligible = append(eligible, v.path)
 	}
 	if skippedCount > 0 {
 		lipgloss.Println(dimStyle.Render(fmt.Sprintf("Skipping %d already-transcribed video(s).", skippedCount)))
@@ -638,25 +651,8 @@ func runTranscribeDir(ctx context.Context, cfg config, dir string) error {
 		return nil
 	}
 
-	// Sort by recording time (oldest first).
-	type videoWithTime struct {
-		path string
-		time time.Time
-	}
-	vts := make([]videoWithTime, len(allVideos))
-	for i, p := range allVideos {
-		vts[i] = videoWithTime{path: p, time: getRecordingTime(p)}
-	}
-	sort.Slice(vts, func(i, j int) bool {
-		return vts[i].time.Before(vts[j].time)
-	})
-	sorted := make([]string, len(vts))
-	for i, v := range vts {
-		sorted[i] = v.path
-	}
-
 	fmt.Println()
-	return runTranscription(ctx, cfg, sorted)
+	return runTranscription(ctx, cfg, allVideos)
 }
 
 // -------- Helpers --------
