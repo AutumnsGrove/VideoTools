@@ -124,6 +124,11 @@ func discoverMedia(dcimPath string) ([]mediaFile, error) {
 }
 
 func copyFile(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -136,16 +141,25 @@ func copyFile(src, dst string) error {
 	}
 	defer out.Close()
 
-	if _, err := io.Copy(out, in); err != nil {
+	written, err := io.Copy(out, in)
+	if err != nil {
+		os.Remove(dst)
 		return err
 	}
 
-	info, err := os.Stat(src)
-	if err == nil {
-		os.Chtimes(dst, info.ModTime(), info.ModTime())
+	if err := out.Close(); err != nil {
+		os.Remove(dst)
+		return err
 	}
 
-	return out.Close()
+	// Verify copied size matches source.
+	if written != srcInfo.Size() {
+		os.Remove(dst)
+		return fmt.Errorf("size mismatch: source %d bytes, copied %d bytes", srcInfo.Size(), written)
+	}
+
+	os.Chtimes(dst, srcInfo.ModTime(), srcInfo.ModTime())
+	return nil
 }
 
 func processFile(outputBase string, mf mediaFile, index int) copyResult {
@@ -154,8 +168,22 @@ func processFile(outputBase string, mf mediaFile, index int) copyResult {
 	filename := generateFilename(index, mf.date, mf.fileType, ext)
 	destPath := filepath.Join(destDir, filename)
 
-	if _, err := os.Stat(destPath); err == nil {
-		return copyResult{src: mf.path, dst: destPath, skipped: true}
+	// Check source file integrity — reject 0-byte files.
+	srcInfo, err := os.Stat(mf.path)
+	if err != nil {
+		return copyResult{src: mf.path, err: fmt.Errorf("cannot stat source: %w", err)}
+	}
+	if srcInfo.Size() == 0 {
+		return copyResult{src: mf.path, err: fmt.Errorf("source file is 0 bytes (empty/corrupt recording)")}
+	}
+
+	// If destination exists, verify its integrity against source.
+	if dstInfo, err := os.Stat(destPath); err == nil {
+		if dstInfo.Size() == srcInfo.Size() {
+			return copyResult{src: mf.path, dst: destPath, skipped: true}
+		}
+		// Size mismatch — destination is incomplete/corrupt, re-copy.
+		os.Remove(destPath)
 	}
 
 	if err := os.MkdirAll(destDir, 0755); err != nil {

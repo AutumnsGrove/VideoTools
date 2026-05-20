@@ -596,6 +596,13 @@ func runCompressDir(ctx context.Context, cfg config, dir string) error {
 // If the compressed output would not save space, the original is preserved and an
 // error with stage="verify" is returned.
 func compressOne(ctx context.Context, cfg config, srcPath, encoder string, idx, total int) (int64, string, error) {
+	// Pre-flight: reject empty/corrupt files with a clear message.
+	if fi, err := os.Stat(srcPath); err != nil {
+		return 0, "validate", fmt.Errorf("cannot access file: %w", err)
+	} else if fi.Size() == 0 {
+		return 0, "validate", fmt.Errorf("file is 0 bytes (empty/corrupt recording)")
+	}
+
 	info, err := probe(srcPath)
 	if err != nil {
 		return 0, "probe", err

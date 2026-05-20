@@ -440,6 +440,23 @@ func transcribeOne(ctx context.Context, cfg config, apiKey, path string, idx, to
 			dimStyle.Render("· "+step))
 	}
 
+	// Pre-flight: verify the video file is valid before any processing.
+	printTranscribeStep("validating file")
+	if fi, err := os.Stat(path); err != nil {
+		return transcribeResult{path: path, err: fmt.Errorf("cannot access file: %w", err), stage: "validate"}
+	} else if fi.Size() == 0 {
+		return transcribeResult{path: path, err: fmt.Errorf("file is 0 bytes (empty/corrupt recording)"), stage: "validate"}
+	}
+	// Quick ffprobe check to ensure the container is readable.
+	probeCmd := exec.CommandContext(ctx, "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path)
+	if probeOut, err := probeCmd.CombinedOutput(); err != nil {
+		detail := strings.TrimSpace(string(probeOut))
+		if detail == "" {
+			detail = err.Error()
+		}
+		return transcribeResult{path: path, err: fmt.Errorf("file is not a valid video: %s", detail), stage: "validate"}
+	}
+
 	// Step 1: Extract audio.
 	printTranscribeStep("extracting audio")
 	mp3Path, err := extractAudio(ctx, path, tempDir)
