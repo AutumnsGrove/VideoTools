@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -36,6 +39,7 @@ type copyResult struct {
 	dst     string
 	copied  bool
 	skipped bool
+	reason  string // "identical", "compressed", "new file", "size mismatch", etc.
 	err     error
 }
 
@@ -162,7 +166,32 @@ func copyFile(src, dst string) error {
 	return nil
 }
 
-func processFile(outputBase string, mf mediaFile, index int) copyResult {
+// checkCompressedTag runs a lightweight ffprobe to see if a file on disk
+// carries our "camera-sync/compressed" metadata comment. Only called when
+// sizes don't match, so the extra exec is rare.
+func checkCompressedTag(path string) bool {
+	cmd := exec.Command("ffprobe",
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_entries", "format_tags=comment",
+		path,
+	)
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	var data struct {
+		Format struct {
+			Tags map[string]string `json:"tags"`
+		} `json:"format"`
+	}
+	if err := json.Unmarshal(out, &data); err != nil {
+		return false
+	}
+	return data.Format.Tags["comment"] == compressedByUs
+}
+
+func processFile(ctx context.Context, outputBase string, mf mediaFile, index int, dryRun bool) copyResult {
 	destDir := buildDestPath(outputBase, mf.date, mf.fileType)
 	ext := strings.ToLower(filepath.Ext(mf.path))
 	filename := generateFilename(index, mf.date, mf.fileType, ext)
@@ -180,10 +209,29 @@ func processFile(outputBase string, mf mediaFile, index int) copyResult {
 	// If destination exists, verify its integrity against source.
 	if dstInfo, err := os.Stat(destPath); err == nil {
 		if dstInfo.Size() == srcInfo.Size() {
-			return copyResult{src: mf.path, dst: destPath, skipped: true}
+			return copyResult{src: mf.path, dst: destPath, skipped: true, reason: "identical"}
 		}
-		// Size mismatch — destination is incomplete/corrupt, re-copy.
+		// Size mismatch — check if destination was compressed by us before
+		// assuming it's corrupt. Only probe video files with non-zero size.
+		if dstInfo.Size() > 0 && isVideoPath(destPath) && checkCompressedTag(destPath) {
+			return copyResult{src: mf.path, dst: destPath, skipped: true, reason: "compressed"}
+		}
+		// Genuinely incomplete/corrupt — needs (re-)copy.
+		if dryRun {
+			return copyResult{src: mf.path, dst: destPath, copied: true,
+				reason: fmt.Sprintf("size mismatch: src %s, dst %s", formatBytes(srcInfo.Size()), formatBytes(dstInfo.Size()))}
+		}
 		os.Remove(destPath)
+	} else {
+		// Destination doesn't exist yet.
+		if dryRun {
+			return copyResult{src: mf.path, dst: destPath, copied: true, reason: "new file"}
+		}
+	}
+
+	// Check for cancellation before starting a potentially large copy.
+	if ctx.Err() != nil {
+		return copyResult{src: mf.path, err: ctx.Err()}
 	}
 
 	if err := os.MkdirAll(destDir, 0755); err != nil {
@@ -211,8 +259,9 @@ type syncResult struct {
 }
 
 // runSync performs discovery and the copy phase. It returns the paths of video
-// files that were newly copied this session.
-func runSync(cfg config) (syncResult, error) {
+// files that were newly copied this session. When dryRun is true it performs
+// the same mapping and verification but never copies or deletes anything.
+func runSync(ctx context.Context, cfg config, dryRun bool) (syncResult, error) {
 	res := syncResult{discoverStart: time.Now()}
 
 	if _, err := os.Stat(cfg.Source); os.IsNotExist(err) {
@@ -261,7 +310,11 @@ func runSync(cfg config) (syncResult, error) {
 		go func() {
 			defer wg.Done()
 			for j := range jobCh {
-				resultCh <- processFile(cfg.Destination, j.file, j.index)
+				if ctx.Err() != nil {
+					resultCh <- copyResult{src: j.file.path, err: ctx.Err()}
+					continue
+				}
+				resultCh <- processFile(ctx, cfg.Destination, j.file, j.index, dryRun)
 			}
 		}()
 	}
@@ -275,6 +328,11 @@ func runSync(cfg config) (syncResult, error) {
 		wg.Wait()
 		close(resultCh)
 	}()
+
+	progressLabel := "Syncing"
+	if dryRun {
+		progressLabel = "Verifying"
+	}
 
 	var copied, skipped, failed atomic.Int32
 	total := len(jobs)
@@ -296,20 +354,37 @@ func runSync(cfg config) (syncResult, error) {
 		case r.copied:
 			copied.Add(1)
 			fmt.Print("\r\033[K")
-			lipgloss.Println(timestamp() + " " + copiedStyle.Render("COPY") + " " +
-				dimStyle.Render(r.src) + " " + dimStyle.Render("->") + " " + valueStyle.Render(r.dst))
+			if dryRun {
+				detail := ""
+				if r.reason != "" {
+					detail = " " + dimStyle.Render("("+r.reason+")")
+				}
+				lipgloss.Println(timestamp() + " " + copiedStyle.Render("NEED") + detail +
+					" " + dimStyle.Render(r.src) + " " + dimStyle.Render("->") + " " + valueStyle.Render(r.dst))
+			} else {
+				lipgloss.Println(timestamp() + " " + copiedStyle.Render("COPY") + " " +
+					dimStyle.Render(r.src) + " " + dimStyle.Render("->") + " " + valueStyle.Render(r.dst))
+			}
 			if isVideoPath(r.dst) {
 				copiedVideos = append(copiedVideos, r.dst)
 			}
 		case r.skipped:
 			skipped.Add(1)
 			fmt.Print("\r\033[K")
-			lipgloss.Println(timestamp() + " " + skippedStyle.Render("SKIP") + " " +
-				dimStyle.Render("File already exists:") + " " + valueStyle.Render(r.dst))
+			switch r.reason {
+			case "compressed":
+				lipgloss.Println(timestamp() + " " + successStyle.Render("  OK") + " " +
+					dimStyle.Render("Compressed:") + " " + valueStyle.Render(r.dst))
+			default:
+				lipgloss.Println(timestamp() + " " + successStyle.Render("  OK") + " " +
+					dimStyle.Render("Synced:") + " " + valueStyle.Render(r.dst))
+			}
 		}
 
 		elapsed := time.Since(syncStart)
 		bar := renderSyncProgressBar(processed, total, 30, elapsed)
+		// Swap label for dry-run.
+		bar = strings.Replace(bar, "Syncing:", progressLabel+":", 1)
 		fmt.Print("\r" + bar)
 
 		printMu.Unlock()
@@ -317,6 +392,7 @@ func runSync(cfg config) (syncResult, error) {
 
 	elapsed := time.Since(syncStart)
 	bar := renderSyncProgressBar(total, total, 30, elapsed)
+	bar = strings.Replace(bar, "Syncing:", progressLabel+":", 1)
 	fmt.Print("\r\033[K" + bar)
 	fmt.Println()
 	fmt.Println()

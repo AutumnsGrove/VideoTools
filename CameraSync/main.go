@@ -151,6 +151,7 @@ func main() {
 	transcribeDirFlag := flag.String("transcribe-dir", "", "skip sync; transcribe all videos in a directory")
 	transcribeFileFlag := flag.String("transcribe-file", "", "skip sync; transcribe a single file and exit")
 	yesFlag := flag.Bool("yes", false, "skip all confirmations; run full pipeline unattended")
+	dryRunFlag := flag.Bool("dry-run", false, "verify sync status without copying; shows what needs syncing")
 	flag.Parse()
 
 	// --yes implies both --compress and --transcribe.
@@ -273,7 +274,7 @@ func main() {
 		labelStyle.Render("  Workers:     ") + valueStyle.Render(fmt.Sprintf("%d", cfg.Workers)))
 	fmt.Println()
 
-	sr, err := runSync(cfg)
+	sr, err := runSync(ctx, cfg, *dryRunFlag)
 	if err != nil {
 		lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
 		os.Exit(1)
@@ -282,6 +283,23 @@ func main() {
 	// Sync summary.
 	divider := dividerStyle.Render(strings.Repeat("━", 50))
 	lipgloss.Println(divider)
+	if *dryRunFlag {
+		lipgloss.Println(headerStyle.Render("Verification complete") + " " +
+			dimStyle.Render(fmt.Sprintf("in %s", sr.elapsed)))
+		fmt.Println()
+		lipgloss.Println(labelStyle.Render("  Need sync: ") + copiedStyle.Render(fmt.Sprintf("%d", sr.copied)))
+		lipgloss.Println(labelStyle.Render("  Up to date:") + successStyle.Render(fmt.Sprintf(" %d", sr.skipped)))
+		lipgloss.Println(labelStyle.Render("  Errors:    ") + errorStyle.Render(fmt.Sprintf("%d", sr.failed)))
+		lipgloss.Println(labelStyle.Render("  Total:     ") + valueStyle.Render(fmt.Sprintf("%d", sr.total)))
+		fmt.Println()
+		if sr.copied > 0 {
+			lipgloss.Println(infoStyle.Render(fmt.Sprintf("Run without --dry-run to sync %d file(s).", sr.copied)))
+		} else {
+			lipgloss.Println(successStyle.Render("Everything is synced."))
+		}
+		fmt.Println()
+		return
+	}
 	lipgloss.Println(headerStyle.Render("Sync complete") + " " +
 		dimStyle.Render(fmt.Sprintf("in %s", sr.elapsed)))
 	fmt.Println()
