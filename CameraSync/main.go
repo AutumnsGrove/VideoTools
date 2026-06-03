@@ -146,11 +146,18 @@ func main() {
 	compressAllFlag := flag.Bool("compress-all", false, "skip sync; compress all videos on destination")
 	compressDirFlag := flag.String("compress-dir", "", "skip sync; compress all uncompressed videos in a directory")
 	compressFileFlag := flag.String("compress-file", "", "skip sync; compress a single file and exit")
-	transcribeFlag := flag.Bool("transcribe", false, "transcribe after compress without prompting")
+	transcribeFlag := flag.Bool("transcribe", false, "transcribe after sync without prompting")
 	noTranscribeFlag := flag.Bool("no-transcribe", false, "skip transcription entirely")
 	transcribeDirFlag := flag.String("transcribe-dir", "", "skip sync; transcribe all videos in a directory")
 	transcribeFileFlag := flag.String("transcribe-file", "", "skip sync; transcribe a single file and exit")
+	yesFlag := flag.Bool("yes", false, "skip all confirmations; run full pipeline unattended")
 	flag.Parse()
+
+	// --yes implies both --compress and --transcribe.
+	if *yesFlag {
+		*compressFlag = true
+		*transcribeFlag = true
+	}
 
 	cfg, err := loadConfig(*configPath)
 	if err != nil {
@@ -284,14 +291,6 @@ func main() {
 	lipgloss.Println(labelStyle.Render("  Total:   ") + valueStyle.Render(fmt.Sprintf("%d", sr.total)))
 	fmt.Println()
 
-	// Decide whether to run compression.
-	if *noCompressFlag {
-		if sr.failed > 0 {
-			os.Exit(1)
-		}
-		return
-	}
-
 	if len(sr.copiedVideos) == 0 {
 		if sr.failed > 0 {
 			os.Exit(1)
@@ -299,39 +298,7 @@ func main() {
 		return
 	}
 
-	eligible := filterBySize(sr.copiedVideos, int64(cfg.Compression.MinSizeMB)*1024*1024)
-	if len(eligible) == 0 {
-		lipgloss.Println(dimStyle.Render(fmt.Sprintf(
-			"No videos above %d MB threshold — skipping compression.", cfg.Compression.MinSizeMB)))
-		if sr.failed > 0 {
-			os.Exit(1)
-		}
-		return
-	}
-
-	totalSize := totalBytes(eligible)
-	lipgloss.Println(infoStyle.Render(fmt.Sprintf(
-		"%d video(s) eligible for compression (%s total).",
-		len(eligible), formatBytes(totalSize))))
-
-	shouldCompress := *compressFlag
-	if !shouldCompress {
-		if cfg.Compression.PromptAfterSync {
-			shouldCompress = promptYesNo("Compress now?", false)
-		}
-	}
-
-	if !shouldCompress {
-		lipgloss.Println(dimStyle.Render("Skipping compression."))
-	} else {
-		fmt.Println()
-		if err := runCompression(ctx, cfg, eligible); err != nil {
-			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Compression error: "+err.Error()))
-			os.Exit(1)
-		}
-	}
-
-	// Transcription stage: transcribe newly copied videos.
+	// Transcription stage (runs first — transcripts are needed quickly).
 	if !*noTranscribeFlag && len(sr.copiedVideos) > 0 {
 		shouldTranscribe := *transcribeFlag
 		if !shouldTranscribe {
@@ -350,6 +317,37 @@ func main() {
 			}
 		} else {
 			lipgloss.Println(dimStyle.Render("Skipping transcription."))
+		}
+	}
+
+	// Compression stage (runs after transcription).
+	if !*noCompressFlag {
+		eligible := filterBySize(sr.copiedVideos, int64(cfg.Compression.MinSizeMB)*1024*1024)
+		if len(eligible) == 0 {
+			lipgloss.Println(dimStyle.Render(fmt.Sprintf(
+				"No videos above %d MB threshold — skipping compression.", cfg.Compression.MinSizeMB)))
+		} else {
+			totalSize := totalBytes(eligible)
+			lipgloss.Println(infoStyle.Render(fmt.Sprintf(
+				"%d video(s) eligible for compression (%s total).",
+				len(eligible), formatBytes(totalSize))))
+
+			shouldCompress := *compressFlag
+			if !shouldCompress {
+				if cfg.Compression.PromptAfterSync {
+					shouldCompress = promptYesNo("Compress now?", false)
+				}
+			}
+
+			if !shouldCompress {
+				lipgloss.Println(dimStyle.Render("Skipping compression."))
+			} else {
+				fmt.Println()
+				if err := runCompression(ctx, cfg, eligible); err != nil {
+					lipgloss.Fprintln(os.Stderr, errorStyle.Render("Compression error: "+err.Error()))
+					os.Exit(1)
+				}
+			}
 		}
 	}
 
