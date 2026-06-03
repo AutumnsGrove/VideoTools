@@ -152,6 +152,7 @@ func main() {
 	transcribeFileFlag := flag.String("transcribe-file", "", "skip sync; transcribe a single file and exit")
 	yesFlag := flag.Bool("yes", false, "skip all confirmations; run full pipeline unattended")
 	dryRunFlag := flag.Bool("dry-run", false, "verify sync status without copying; shows what needs syncing")
+	verifyFlag := flag.Bool("verify", false, "audit all source files against destination; confirms nothing is missing or broken")
 	flag.Parse()
 
 	// --yes implies both --compress and --transcribe.
@@ -265,6 +266,24 @@ func main() {
 		return
 	}
 
+	// Mode: --verify (standalone audit)
+	if *verifyFlag {
+		lipgloss.Println(
+			labelStyle.Render("  Source:      ") + valueStyle.Render(cfg.Source))
+		lipgloss.Println(
+			labelStyle.Render("  Destination: ") + valueStyle.Render(cfg.Destination))
+		fmt.Println()
+		audit, err := runVerify(cfg, cfg.Workers)
+		if err != nil {
+			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
+			os.Exit(1)
+		}
+		if audit.fail > 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Normal mode: sync, then optionally compress.
 	lipgloss.Println(
 		labelStyle.Render("  Source:      ") + valueStyle.Render(cfg.Source))
@@ -298,75 +317,80 @@ func main() {
 			lipgloss.Println(successStyle.Render("Everything is synced."))
 		}
 		fmt.Println()
-		return
-	}
-	lipgloss.Println(headerStyle.Render("Sync complete") + " " +
-		dimStyle.Render(fmt.Sprintf("in %s", sr.elapsed)))
-	fmt.Println()
-	lipgloss.Println(labelStyle.Render("  Copied:  ") + copiedStyle.Render(fmt.Sprintf("%d", sr.copied)))
-	lipgloss.Println(labelStyle.Render("  Skipped: ") + skippedStyle.Render(fmt.Sprintf("%d", sr.skipped)))
-	lipgloss.Println(labelStyle.Render("  Failed:  ") + errorStyle.Render(fmt.Sprintf("%d", sr.failed)))
-	lipgloss.Println(labelStyle.Render("  Total:   ") + valueStyle.Render(fmt.Sprintf("%d", sr.total)))
-	fmt.Println()
+	} else {
+		lipgloss.Println(headerStyle.Render("Sync complete") + " " +
+			dimStyle.Render(fmt.Sprintf("in %s", sr.elapsed)))
+		fmt.Println()
+		lipgloss.Println(labelStyle.Render("  Copied:  ") + copiedStyle.Render(fmt.Sprintf("%d", sr.copied)))
+		lipgloss.Println(labelStyle.Render("  Skipped: ") + skippedStyle.Render(fmt.Sprintf("%d", sr.skipped)))
+		lipgloss.Println(labelStyle.Render("  Failed:  ") + errorStyle.Render(fmt.Sprintf("%d", sr.failed)))
+		lipgloss.Println(labelStyle.Render("  Total:   ") + valueStyle.Render(fmt.Sprintf("%d", sr.total)))
+		fmt.Println()
 
-	if len(sr.copiedVideos) == 0 {
-		if sr.failed > 0 {
-			os.Exit(1)
-		}
-		return
-	}
+		if len(sr.copiedVideos) > 0 {
+			// Transcription stage (runs first — transcripts are needed quickly).
+			if !*noTranscribeFlag {
+				shouldTranscribe := *transcribeFlag
+				if !shouldTranscribe {
+					if cfg.Transcription.PromptAfterCompress {
+						shouldTranscribe = promptYesNo("Transcribe videos?", false)
+					}
+				}
 
-	// Transcription stage (runs first — transcripts are needed quickly).
-	if !*noTranscribeFlag && len(sr.copiedVideos) > 0 {
-		shouldTranscribe := *transcribeFlag
-		if !shouldTranscribe {
-			if cfg.Transcription.PromptAfterCompress {
-				shouldTranscribe = promptYesNo("Transcribe videos?", false)
-			}
-		}
-
-		if shouldTranscribe {
-			fmt.Println()
-			lipgloss.Println(headerStyle.Render("Transcription"))
-			fmt.Println()
-			if err := runTranscription(ctx, cfg, sr.copiedVideos); err != nil {
-				lipgloss.Fprintln(os.Stderr, errorStyle.Render("Transcription error: "+err.Error()))
-				os.Exit(1)
-			}
-		} else {
-			lipgloss.Println(dimStyle.Render("Skipping transcription."))
-		}
-	}
-
-	// Compression stage (runs after transcription).
-	if !*noCompressFlag {
-		eligible := filterBySize(sr.copiedVideos, int64(cfg.Compression.MinSizeMB)*1024*1024)
-		if len(eligible) == 0 {
-			lipgloss.Println(dimStyle.Render(fmt.Sprintf(
-				"No videos above %d MB threshold — skipping compression.", cfg.Compression.MinSizeMB)))
-		} else {
-			totalSize := totalBytes(eligible)
-			lipgloss.Println(infoStyle.Render(fmt.Sprintf(
-				"%d video(s) eligible for compression (%s total).",
-				len(eligible), formatBytes(totalSize))))
-
-			shouldCompress := *compressFlag
-			if !shouldCompress {
-				if cfg.Compression.PromptAfterSync {
-					shouldCompress = promptYesNo("Compress now?", false)
+				if shouldTranscribe {
+					fmt.Println()
+					lipgloss.Println(headerStyle.Render("Transcription"))
+					fmt.Println()
+					if err := runTranscription(ctx, cfg, sr.copiedVideos); err != nil {
+						lipgloss.Fprintln(os.Stderr, errorStyle.Render("Transcription error: "+err.Error()))
+						os.Exit(1)
+					}
+				} else {
+					lipgloss.Println(dimStyle.Render("Skipping transcription."))
 				}
 			}
 
-			if !shouldCompress {
-				lipgloss.Println(dimStyle.Render("Skipping compression."))
-			} else {
-				fmt.Println()
-				if err := runCompression(ctx, cfg, eligible); err != nil {
-					lipgloss.Fprintln(os.Stderr, errorStyle.Render("Compression error: "+err.Error()))
-					os.Exit(1)
+			// Compression stage (runs after transcription).
+			if !*noCompressFlag {
+				eligible := filterBySize(sr.copiedVideos, int64(cfg.Compression.MinSizeMB)*1024*1024)
+				if len(eligible) == 0 {
+					lipgloss.Println(dimStyle.Render(fmt.Sprintf(
+						"No videos above %d MB threshold — skipping compression.", cfg.Compression.MinSizeMB)))
+				} else {
+					totalSize := totalBytes(eligible)
+					lipgloss.Println(infoStyle.Render(fmt.Sprintf(
+						"%d video(s) eligible for compression (%s total).",
+						len(eligible), formatBytes(totalSize))))
+
+					shouldCompress := *compressFlag
+					if !shouldCompress {
+						if cfg.Compression.PromptAfterSync {
+							shouldCompress = promptYesNo("Compress now?", false)
+						}
+					}
+
+					if !shouldCompress {
+						lipgloss.Println(dimStyle.Render("Skipping compression."))
+					} else {
+						fmt.Println()
+						if err := runCompression(ctx, cfg, eligible); err != nil {
+							lipgloss.Fprintln(os.Stderr, errorStyle.Render("Compression error: "+err.Error()))
+							os.Exit(1)
+						}
+					}
 				}
 			}
 		}
+	}
+
+	// Aftercare: verify all source files are accounted for on the destination.
+	audit, verifyErr := runVerify(cfg, cfg.Workers)
+	if verifyErr != nil {
+		lipgloss.Fprintln(os.Stderr, errorStyle.Render("Verification error: "+verifyErr.Error()))
+		os.Exit(1)
+	}
+	if audit.fail > 0 {
+		os.Exit(1)
 	}
 
 	if sr.failed > 0 {
