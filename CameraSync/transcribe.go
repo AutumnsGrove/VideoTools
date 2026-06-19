@@ -175,6 +175,21 @@ func extractAudio(ctx context.Context, videoPath, tempDir string) (string, error
 
 // -------- Parakeet transcription --------
 
+// resolveParakeetBin finds the parakeet-mlx binary. It checks PATH first,
+// then falls back to ~/.local/bin (where uv tool installs it).
+func resolveParakeetBin() string {
+	if p, err := exec.LookPath("parakeet-mlx"); err == nil {
+		return p
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidate := filepath.Join(home, ".local", "bin", "parakeet-mlx")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return "parakeet-mlx" // fall back to bare name, let exec fail with a clear error
+}
+
 func transcribeWithParakeet(ctx context.Context, mp3Path, model, tempDir string) (string, error) {
 	args := []string{
 		"--output-format", "txt",
@@ -185,7 +200,7 @@ func transcribeWithParakeet(ctx context.Context, mp3Path, model, tempDir string)
 	}
 	args = append(args, mp3Path)
 
-	cmd := exec.CommandContext(ctx, "parakeet-mlx", args...)
+	cmd := exec.CommandContext(ctx, resolveParakeetBin(), args...)
 	var stderr bytes.Buffer
 	cmd.Stdout = io.Discard
 	cmd.Stderr = &stderr
@@ -631,6 +646,9 @@ func runTranscription(ctx context.Context, cfg config, paths []string) error {
 func runTranscribeFile(ctx context.Context, cfg config, path string) error {
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("file not found: %w", err)
+	}
+	if !isVideoPath(path) {
+		return fmt.Errorf("not a video file: %s (supported: .mp4, .mov, .avi, .mkv, .m4v, .3gp)", filepath.Base(path))
 	}
 	return runTranscription(ctx, cfg, []string{path})
 }
