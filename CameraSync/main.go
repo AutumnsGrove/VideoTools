@@ -153,6 +153,8 @@ func main() {
 	yesFlag := flag.Bool("yes", false, "skip all confirmations; run full pipeline unattended")
 	dryRunFlag := flag.Bool("dry-run", false, "verify sync status without copying; shows what needs syncing")
 	verifyFlag := flag.Bool("verify", false, "audit all source files against destination; confirms nothing is missing or broken")
+	auditJournalFlag := flag.Bool("audit-journal", false, "skip sync; cross-reference source videos against the journal to find already-transcribed videos safe to delete")
+	journalFlag := flag.String("journal", "", "journal base dir override (used with -audit-journal)")
 	flag.Parse()
 
 	// --yes implies both --compress and --transcribe.
@@ -260,6 +262,26 @@ func main() {
 			labelStyle.Render("  Directory:   ") + valueStyle.Render(*transcribeDirFlag))
 		fmt.Println()
 		if err := runTranscribeDir(ctx, cfg, *transcribeDirFlag); err != nil {
+			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Mode: --audit-journal (standalone, read-only; no sync/compress/transcribe)
+	if *auditJournalFlag {
+		journalDir := cfg.Transcription.JournalBaseDir
+		if *journalFlag != "" {
+			journalDir = *journalFlag
+		}
+		lipgloss.Println(
+			labelStyle.Render("  Mode:        ") + valueStyle.Render("audit-journal"))
+		lipgloss.Println(
+			labelStyle.Render("  Source:      ") + valueStyle.Render(cfg.Source))
+		lipgloss.Println(
+			labelStyle.Render("  Journal:     ") + valueStyle.Render(journalDir))
+		fmt.Println()
+		if err := runAuditJournal(cfg, cfg.Source, journalDir); err != nil {
 			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
 			os.Exit(1)
 		}
