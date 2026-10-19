@@ -55,7 +55,7 @@ func defaultConfig() config {
 			PromptAfterCompress: true,
 			ParakeetModel:       "/Volumes/External/Models/mlx-community/parakeet-tdt-0.6b-v2",
 			JournalBaseDir:      "/Users/mini/Obsidian/AutumnsGarden/Journal",
-			AnthropicModel:      "claude-haiku-4-5-20251001",
+			AnthropicModel:      "claude-haiku-5-5",
 			EnhanceWithLLM:      true,
 			TempDir:             "/tmp/video_transcribe",
 		},
