@@ -109,3 +109,40 @@ Files are organized by date with ordinal day suffixes:
 | `-dst` | from config | Destination base path |
 | `-workers` | from config (8) | Concurrent copy workers |
 | `-config` | auto-discover | Path to config.json |
+| `-verify` | | Audit all source files against the destination (read-only) |
+| `-prune` | | Verify, then move every verified source file to the Trash |
+| `-dry-run` | | Preview only — with `-prune`, shows the delete queue without moving anything |
+| `-yes` | | Skip confirmations; with `-prune`, moves the queue without asking |
+
+## Pruning the Card
+
+Once everything is on the external drive, `-prune` clears the card:
+
+```bash
+# Preview what would be trashed (runs the full verification pipeline)
+camera-sync -prune -dry-run
+
+# Verify, then move the verified files to the Trash in one batch
+camera-sync -prune
+
+# Unattended
+camera-sync -prune -yes
+```
+
+The full aftercare verification runs first, and **only** files that verify as
+`PASS` (exact size match) or `COMPRESSED` (copy we compressed ourselves)
+are queued. `MISSING`, `EMPTY`, `CORRUPT` and `TRUNCATED` files always stay on
+the card. Each queued path is re-checked on disk at plan time, so a stale audit
+can't queue something that has since changed.
+
+Safety rails:
+
+- Refuses to run if the source or destination is missing (external drive unmounted)
+- Refuses to run if source and destination are on the same volume
+- Only ever touches files inside the source tree
+- Shows the queue and asks for confirmation (unless `-yes`)
+- Verifies each file actually left the card after trashing
+
+On macOS, files are moved through Finder, so card contents land in the card's
+own `.Trashes` folder (they don't eat internal disk space) and keep "Put Back"
+metadata. Empty the Trash to reclaim the space.

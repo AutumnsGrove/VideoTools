@@ -153,6 +153,7 @@ func main() {
 	yesFlag := flag.Bool("yes", false, "skip all confirmations; run full pipeline unattended")
 	dryRunFlag := flag.Bool("dry-run", false, "verify sync status without copying; shows what needs syncing")
 	verifyFlag := flag.Bool("verify", false, "audit all source files against destination; confirms nothing is missing or broken")
+	pruneFlag := flag.Bool("prune", false, "verify, then move every verified source file to the Trash (videos and photos)")
 	auditJournalFlag := flag.Bool("audit-journal", false, "skip sync; cross-reference source videos against the journal to find already-transcribed videos safe to delete")
 	journalFlag := flag.String("journal", "", "journal base dir override (used with -audit-journal)")
 	flag.Parse()
@@ -282,6 +283,26 @@ func main() {
 			labelStyle.Render("  Journal:     ") + valueStyle.Render(journalDir))
 		fmt.Println()
 		if err := runAuditJournal(cfg, cfg.Source, journalDir); err != nil {
+			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Mode: --prune (standalone: full verification, then Trash the verified files)
+	if *pruneFlag {
+		lipgloss.Println(
+			labelStyle.Render("  Mode:        ") + valueStyle.Render("prune"))
+		lipgloss.Println(
+			labelStyle.Render("  Source:      ") + valueStyle.Render(cfg.Source))
+		lipgloss.Println(
+			labelStyle.Render("  Destination: ") + valueStyle.Render(cfg.Destination))
+		if *dryRunFlag {
+			lipgloss.Println(
+				labelStyle.Render("  Dry run:     ") + warnStyle.Render("nothing will be moved"))
+		}
+		fmt.Println()
+		if err := runPrune(cfg, cfg.Workers, *dryRunFlag, *yesFlag); err != nil {
 			lipgloss.Fprintln(os.Stderr, errorStyle.Render("Error: "+err.Error()))
 			os.Exit(1)
 		}
