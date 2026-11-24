@@ -20,12 +20,13 @@ const pruneBatchSize = 100
 // pruneMaxListed caps how many queued paths we echo back before summarizing.
 const pruneMaxListed = 40
 
-// pruneItem is one verified source file queued for the trash.
+// pruneItem is one source file queued for the trash.
 type pruneItem struct {
 	src    string
 	dst    string
 	size   int64
 	status verifyStatus
+	empty  bool // 0-byte recording: nothing was ever written, nothing to lose
 }
 
 // prunable reports whether a verification status means the source file is
@@ -38,15 +39,15 @@ func prunable(status verifyStatus) bool {
 
 // buildPrunePlan turns verification results into a delete queue, re-checking
 // the filesystem at plan time so nothing is queued on stale information.
+//
+// Two kinds of files qualify: verified copies (PASS/COMPRESSED) and 0-byte
+// recordings, which hold no data at all.
 func buildPrunePlan(audit verifyAudit, sourceRoot string) []pruneItem {
 	root := filepath.Clean(sourceRoot)
 	seen := make(map[string]bool, len(audit.results))
 	var items []pruneItem
 
 	for _, r := range audit.results {
-		if !prunable(r.status) {
-			continue
-		}
 		src := filepath.Clean(r.src)
 		// Never touch anything outside the source tree.
 		if src != root && !strings.HasPrefix(src, root+string(filepath.Separator)) {
@@ -56,6 +57,20 @@ func buildPrunePlan(audit verifyAudit, sourceRoot string) []pruneItem {
 			continue
 		}
 
+		// 0-byte recording — nothing was ever written to it.
+		if r.status == verifyEmptySource {
+			info, err := os.Stat(src)
+			if err != nil || info.Size() != 0 {
+				continue
+			}
+			seen[src] = true
+			items = append(items, pruneItem{src: src, dst: r.dst, status: r.status, empty: true})
+			continue
+		}
+
+		if !prunable(r.status) {
+			continue
+		}
 		srcInfo, err := os.Stat(src)
 		if err != nil || srcInfo.Size() == 0 {
 			continue
@@ -81,8 +96,12 @@ func buildPrunePlan(audit verifyAudit, sourceRoot string) []pruneItem {
 		})
 	}
 
-	// Largest first so the space math reads naturally.
+	// Verified files first, largest first so the space math reads naturally;
+	// empty recordings last.
 	sort.Slice(items, func(i, j int) bool {
+		if items[i].empty != items[j].empty {
+			return !items[i].empty
+		}
 		if items[i].size != items[j].size {
 			return items[i].size > items[j].size
 		}
@@ -153,11 +172,18 @@ func runPrune(cfg config, workers int, dryRun, assumeYes bool) error {
 	}
 
 	var total int64
-	for i, it := range items {
-		total += it.size
-		if i >= pruneMaxListed {
+	var verifiedCount, emptyCount int
+	listed := 0
+	for _, it := range items {
+		if it.empty {
 			continue
 		}
+		total += it.size
+		verifiedCount++
+		if listed >= pruneMaxListed {
+			continue
+		}
+		listed++
 		tag := successStyle.Render("✓")
 		if it.status == verifyCompressed {
 			tag = copiedStyle.Render("✓")
@@ -167,13 +193,46 @@ func runPrune(cfg config, workers int, dryRun, assumeYes bool) error {
 			dimStyle.Render(filepath.Base(it.src)) + " " +
 			dimStyle.Render("→") + " " + dimStyle.Render(it.dst))
 	}
-	if len(items) > pruneMaxListed {
-		lipgloss.Println("  " + dimStyle.Render(fmt.Sprintf("… and %d more", len(items)-pruneMaxListed)))
+	if verifiedCount > pruneMaxListed {
+		lipgloss.Println("  " + dimStyle.Render(fmt.Sprintf("… and %d more", verifiedCount-pruneMaxListed)))
+	}
+
+	// 0-byte recordings: nothing was ever written, so nothing can be lost.
+	for _, it := range items {
+		if !it.empty {
+			continue
+		}
+		emptyCount++
+	}
+	if emptyCount > 0 {
+		fmt.Println()
+		lipgloss.Println(headerStyle.Render("Empty recordings") + " " +
+			dimStyle.Render("(0 bytes — nothing was ever written)"))
+		shown := 0
+		for _, it := range items {
+			if !it.empty {
+				continue
+			}
+			if shown >= pruneMaxListed {
+				continue
+			}
+			shown++
+			lipgloss.Println("  " + warnStyle.Render("∅") + " " +
+				valueStyle.Render(fmt.Sprintf("%-10s", "0 B")) + " " +
+				dimStyle.Render(filepath.Base(it.src)))
+		}
+		if emptyCount > pruneMaxListed {
+			lipgloss.Println("  " + dimStyle.Render(fmt.Sprintf("… and %d more", emptyCount-pruneMaxListed)))
+		}
 	}
 	fmt.Println()
 
 	lipgloss.Println(labelStyle.Render("  Queued:        ") +
 		valueStyle.Render(fmt.Sprintf("%d file(s), %s", len(items), formatBytes(total))))
+	if emptyCount > 0 {
+		lipgloss.Println(labelStyle.Render("  Of which empty:  ") +
+			warnStyle.Render(fmt.Sprintf("%d 0-byte recording(s)", emptyCount)))
+	}
 	if audit.fail > 0 {
 		lipgloss.Println(labelStyle.Render("  Kept:          ") +
 			warnStyle.Render(fmt.Sprintf("%d file(s) failed verification", audit.fail)))
@@ -197,7 +256,6 @@ func runPrune(cfg config, workers int, dryRun, assumeYes bool) error {
 			return nil
 		}
 	}
-
 	fmt.Println()
 	lipgloss.Println(headerStyle.Render("Moving to Trash") + " " + dimStyle.Render(fmt.Sprintf("(%d file(s))", len(items))))
 	fmt.Println()

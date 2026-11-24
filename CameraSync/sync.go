@@ -35,12 +35,13 @@ type mediaFile struct {
 }
 
 type copyResult struct {
-	src     string
-	dst     string
-	copied  bool
-	skipped bool
-	reason  string // "identical", "compressed", "new file", "size mismatch", etc.
-	err     error
+	src         string
+	dst         string
+	copied      bool
+	skipped     bool
+	emptySource bool
+	reason      string // "identical", "compressed", "new file", "size mismatch", etc.
+	err         error
 }
 
 type job struct {
@@ -203,7 +204,9 @@ func processFile(ctx context.Context, outputBase string, mf mediaFile, index int
 		return copyResult{src: mf.path, err: fmt.Errorf("cannot stat source: %w", err)}
 	}
 	if srcInfo.Size() == 0 {
-		return copyResult{src: mf.path, err: fmt.Errorf("source file is 0 bytes (empty/corrupt recording)")}
+		// Aborted/unfinalized recording. Nothing to copy — report it as an
+		// empty source rather than a failure so it doesn't fail the run.
+		return copyResult{src: mf.path, dst: destPath, emptySource: true, reason: "0-byte recording on card"}
 	}
 
 	// If destination exists, verify its integrity against source.
@@ -248,14 +251,15 @@ func processFile(ctx context.Context, outputBase string, mf mediaFile, index int
 // syncResult summarizes a sync run and returns the paths of the video files that
 // were copied (not skipped), for downstream compression.
 type syncResult struct {
-	copied         int32
-	skipped        int32
-	failed         int32
-	total          int
-	elapsed        time.Duration
-	copiedVideos   []string // destination paths of video files that were actually copied this run
-	discoverStart  time.Time
-	totalDiscover  time.Duration
+	copied        int32
+	skipped       int32
+	failed        int32
+	empty         int32
+	total         int
+	elapsed       time.Duration
+	copiedVideos  []string // destination paths of video files that were actually copied this run
+	discoverStart time.Time
+	totalDiscover time.Duration
 }
 
 // runSync performs discovery and the copy phase. It returns the paths of video
@@ -334,7 +338,7 @@ func runSync(ctx context.Context, cfg config, dryRun bool) (syncResult, error) {
 		progressLabel = "Verifying"
 	}
 
-	var copied, skipped, failed atomic.Int32
+	var copied, skipped, failed, empty atomic.Int32
 	total := len(jobs)
 	processed := 0
 	syncStart := time.Now()
@@ -346,6 +350,12 @@ func runSync(ctx context.Context, cfg config, dryRun bool) (syncResult, error) {
 		printMu.Lock()
 
 		switch {
+		case r.emptySource:
+			empty.Add(1)
+			fmt.Print("\r\033[K")
+			lipgloss.Println(timestamp() + " " + warnStyle.Render("EMPTY") + " " +
+				dimStyle.Render(filepath.Base(r.src)) + " " +
+				dimStyle.Render("("+r.reason+")"))
 		case r.err != nil:
 			failed.Add(1)
 			fmt.Print("\r\033[K")
@@ -400,6 +410,7 @@ func runSync(ctx context.Context, cfg config, dryRun bool) (syncResult, error) {
 	res.copied = copied.Load()
 	res.skipped = skipped.Load()
 	res.failed = failed.Load()
+	res.empty = empty.Load()
 	res.total = total
 	res.elapsed = time.Since(res.discoverStart).Round(time.Millisecond)
 	res.copiedVideos = copiedVideos

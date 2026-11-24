@@ -26,6 +26,7 @@ const (
 	verifyEmpty                          // destination is 0 bytes (interrupted copy)
 	verifyCorrupt                        // destination exists but is broken (size mismatch + not compressed + not playable)
 	verifyTruncated                      // destination exists, wrong size, no compressed tag, but IS playable (partial?)
+	verifyEmptySource                    // source itself is 0 bytes (aborted recording) — nothing to verify
 )
 
 func (v verifyStatus) String() string {
@@ -44,6 +45,8 @@ func (v verifyStatus) String() string {
 		return "CORRUPT"
 	case verifyTruncated:
 		return "TRUNCATED"
+	case verifyEmptySource:
+		return "EMPTY SRC"
 	default:
 		return "UNKNOWN"
 	}
@@ -106,6 +109,14 @@ func verifyFile(outputBase string, mf mediaFile, index int) verifyResult {
 		fileType: mf.fileType,
 	}
 
+	// 0-byte source — aborted/unfinalized recording. There is nothing to copy,
+	// so a missing destination is expected and must not count as a failure.
+	if srcInfo.Size() == 0 {
+		res.status = verifyEmptySource
+		res.detail = "0-byte recording on card (nothing to sync)"
+		return res
+	}
+
 	dstInfo, err := os.Stat(destPath)
 	if err != nil {
 		res.status = verifyMissing
@@ -157,11 +168,12 @@ func verifyFile(outputBase string, mf mediaFile, index int) verifyResult {
 
 // verifyAudit holds the aggregated results of a full verification pass.
 type verifyAudit struct {
-	results  []verifyResult
-	pass     int32
-	fail     int32
-	total    int
-	elapsed  time.Duration
+	results []verifyResult
+	pass    int32
+	fail    int32
+	empty   int32
+	total   int
+	elapsed time.Duration
 }
 
 // runVerify performs a full aftercare audit: discovers all files on the source,
@@ -242,7 +254,7 @@ func runVerify(cfg config, workers int) (verifyAudit, error) {
 		close(resultCh)
 	}()
 
-	var pass, fail atomic.Int32
+	var pass, fail, empty atomic.Int32
 	total := len(jobs)
 	processed := 0
 	verifyStart := time.Now()
@@ -264,6 +276,11 @@ func runVerify(cfg config, workers int) (verifyAudit, error) {
 			detail := dimStyle.Render(r.detail)
 			lipgloss.Println(timestamp() + " " + label + " " + detail +
 				" " + valueStyle.Render(r.dst))
+		case verifyEmptySource:
+			empty.Add(1)
+			fmt.Print("\r\033[K")
+			lipgloss.Println(timestamp() + " " + warnStyle.Render("EMPTY SRC") + " " +
+				dimStyle.Render(r.detail) + " " + valueStyle.Render(r.src))
 		default:
 			fail.Add(1)
 			failures = append(failures, r)
@@ -292,9 +309,14 @@ func runVerify(cfg config, workers int) (verifyAudit, error) {
 	// Summary.
 	passCount := pass.Load()
 	failCount := fail.Load()
+	emptyCount := empty.Load()
 
 	lipgloss.Println(labelStyle.Render("  Passed: ") + successStyle.Render(fmt.Sprintf("%d", passCount)))
 	lipgloss.Println(labelStyle.Render("  Failed: ") + errorStyle.Render(fmt.Sprintf("%d", failCount)))
+	if emptyCount > 0 {
+		lipgloss.Println(labelStyle.Render("  Empty:  ") + warnStyle.Render(fmt.Sprintf("%d", emptyCount)) +
+			dimStyle.Render(" (0-byte recordings on card — nothing to sync)"))
+	}
 	lipgloss.Println(labelStyle.Render("  Total:  ") + valueStyle.Render(fmt.Sprintf("%d", total)))
 	fmt.Println()
 
@@ -312,12 +334,17 @@ func runVerify(cfg config, workers int) (verifyAudit, error) {
 			"Run 'camera-sync' to re-sync the %d failed file(s).", failCount)))
 	} else {
 		lipgloss.Println(successStyle.Render("All files verified. Every source file is accounted for on the external drive."))
+		if emptyCount > 0 {
+			lipgloss.Println(dimStyle.Render(fmt.Sprintf(
+				"%d 0-byte recording(s) skipped — run 'camera-sync --prune' to clear them from the card.", emptyCount)))
+		}
 	}
 	fmt.Println()
 
 	audit.results = allResults
 	audit.pass = passCount
 	audit.fail = failCount
+	audit.empty = emptyCount
 	audit.total = total
 	audit.elapsed = time.Since(start).Round(time.Millisecond)
 	return audit, nil

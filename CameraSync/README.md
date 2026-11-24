@@ -114,6 +114,17 @@ Files are organized by date with ordinal day suffixes:
 | `-dry-run` | | Preview only — with `-prune`, shows the delete queue without moving anything |
 | `-yes` | | Skip confirmations; with `-prune`, moves the queue without asking |
 
+### Verification statuses
+
+| Status | Meaning | Fails the run? | Prunable? |
+|--------|---------|----------------|-----------|
+| `PASS` | Identical size, or a compressed copy we made | no | yes |
+| `EMPTY SRC` | Source file itself is 0 bytes (aborted recording) | no | yes (nothing in it) |
+| `MISSING` | Destination not on the external drive | yes | no |
+| `EMPTY` | Destination is 0 bytes (interrupted copy) | yes | no |
+| `CORRUPT` | Size mismatch, not ours, not playable | yes | no |
+| `TRUNCATED` | Playable but wrong size | yes | no |
+
 ## Pruning the Card
 
 Once everything is on the external drive, `-prune` clears the card:
@@ -134,6 +145,15 @@ The full aftercare verification runs first, and **only** files that verify as
 are queued. `MISSING`, `EMPTY`, `CORRUPT` and `TRUNCATED` files always stay on
 the card. Each queued path is re-checked on disk at plan time, so a stale audit
 can't queue something that has since changed.
+
+**0-byte recordings** (aborted/unfinalized captures — the camera creates the
+filename but never writes data) are queued automatically too, listed under
+"Empty recordings" in the queue. There is nothing in them to lose, and they
+otherwise fail verification on every run because they can never be copied.
+
+Pruning always asks for confirmation before touching anything (default is *no*).
+`-yes` skips the prompt, and a non-interactive stdin also declines, so piping
+into the tool never deletes files by surprise.
 
 Safety rails:
 

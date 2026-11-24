@@ -352,8 +352,16 @@ func main() {
 		lipgloss.Println(labelStyle.Render("  Need sync: ") + copiedStyle.Render(fmt.Sprintf("%d", sr.copied)))
 		lipgloss.Println(labelStyle.Render("  Up to date:") + successStyle.Render(fmt.Sprintf(" %d", sr.skipped)))
 		lipgloss.Println(labelStyle.Render("  Errors:    ") + errorStyle.Render(fmt.Sprintf("%d", sr.failed)))
+		if sr.empty > 0 {
+			lipgloss.Println(labelStyle.Render("  Empty:     ") + warnStyle.Render(fmt.Sprintf("%d", sr.empty)) +
+				dimStyle.Render(" (0-byte recordings on card — nothing to sync)"))
+		}
 		lipgloss.Println(labelStyle.Render("  Total:     ") + valueStyle.Render(fmt.Sprintf("%d", sr.total)))
 		fmt.Println()
+		if sr.empty > 0 {
+			lipgloss.Println(dimStyle.Render("Run 'camera-sync --prune' to clear the 0-byte recordings from the card."))
+			fmt.Println()
+		}
 		if sr.copied > 0 {
 			lipgloss.Println(infoStyle.Render(fmt.Sprintf("Run without --dry-run to sync %d file(s).", sr.copied)))
 		} else {
@@ -367,6 +375,10 @@ func main() {
 		lipgloss.Println(labelStyle.Render("  Copied:  ") + copiedStyle.Render(fmt.Sprintf("%d", sr.copied)))
 		lipgloss.Println(labelStyle.Render("  Skipped: ") + skippedStyle.Render(fmt.Sprintf("%d", sr.skipped)))
 		lipgloss.Println(labelStyle.Render("  Failed:  ") + errorStyle.Render(fmt.Sprintf("%d", sr.failed)))
+		if sr.empty > 0 {
+			lipgloss.Println(labelStyle.Render("  Empty:   ") + warnStyle.Render(fmt.Sprintf("%d", sr.empty)) +
+				dimStyle.Render(" (0-byte recordings on card)"))
+		}
 		lipgloss.Println(labelStyle.Render("  Total:   ") + valueStyle.Render(fmt.Sprintf("%d", sr.total)))
 		fmt.Println()
 
